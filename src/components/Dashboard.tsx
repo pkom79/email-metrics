@@ -641,7 +641,49 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
             <div className="flex items-center justify-between mb-4">
                 Transform your entire email marketing account into actionable business intelligence. Our AI 
                 analyzes patterns across campaigns, flows, audience segments, and subscriber behavior to identify opportunities that would be 
-              </h2>
+                impossible to spot manually.
+              </p>
+            </div>
+            
+            <button
+              onClick={() => setShowAIAnalysis(!showAIAnalysis)}
+              className="group relative px-8 py-4 rounded-xl font-semibold transition-all duration-300 transform bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-lg hover:shadow-2xl hover:scale-105 hover:-translate-y-1"
+            >
+              <span className="relative z-10 flex items-center">
+                <Brain className="w-6 h-6 mr-3" />
+                Start AI Analysis
+                <Sparkles className="w-5 h-5 ml-2 transition-transform duration-300 group-hover:rotate-12" />
+              </span>
+              
+              {/* Shimmer effect */}
+              <div className="absolute inset-0 -top-px rounded-xl bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transform translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+              
+              {/* Glow effect */}
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-600 to-purple-700 blur-xl opacity-0 group-hover:opacity-30 transition-opacity duration-300" />
+            </button>
+          </div>
+          
+          {/* Expandable AI Analysis Section */}
+          {showAIAnalysis && (
+            <div className={`
+              mt-8 p-8 rounded-2xl border transition-all duration-300
+              ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}
+            `}>
+              <div className="text-center">
+                <h3 className={`text-2xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  AI Analysis Results
+                </h3>
+                <p className={`text-lg ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Analysis content will be added here...
+                </p>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+};
               <select
                 value={selectedFlow}
                 onChange={(e) => setSelectedFlow(e.target.value)}
