@@ -204,23 +204,55 @@ async function generateAIInsights(data: EmailDataPayload, apiKey: string) {
   };
 
   // Create the AI prompt
-  const prompt = `You are an expert email marketing analyst. Analyze the following email campaign data and provide actionable insights in the exact JSON format specified below.
+  const prompt = `You are an expert email marketing analyst specializing in AI-powered campaign intelligence. Analyze the following email campaign data and provide comprehensive, actionable insights for ALL analysis modules in the exact JSON format specified below.
 
 EMAIL PERFORMANCE DATA:
 ${JSON.stringify(dataContext, null, 2)}
 
-ANALYSIS REQUIREMENTS:
-1. Subject Line Intelligence: Analyze the top and bottom performing campaign subjects to identify patterns in language, length, structure, and style that correlate with performance.
+COMPREHENSIVE ANALYSIS REQUIREMENTS:
 
-2. Audience Size Analysis: Evaluate the relationship between emails sent and performance metrics to identify optimal audience sizes.
+1. SUBJECT LINE INTELLIGENCE ENGINE
+Analyze ALL campaign subjects to identify:
+- High-impact linguistic patterns (questions, urgency, personalization, etc.)
+- Optimal character length ranges
+- Winning vs losing elements (words, phrases, punctuation)
+- Performance correlations with specific writing styles
+- Concrete examples of successful patterns
 
-3. Performance Trends: Compare current vs previous period to identify positive and negative trends.
+2. OPTIMAL AUDIENCE SIZE DISCOVERY
+Examine relationship between campaign size and performance:
+- Identify exact recipient ranges where performance peaks
+- Find diminishing returns thresholds
+- Reveal optimal segmentation strategies
+- Quantify performance differences across size ranges
 
-4. Health Assessment: Evaluate spam rates, bounce rates, and unsubscribe rates to assess account health.
+3. ENGAGEMENT FUNNEL DIAGNOSTICS
+Analyze the complete customer journey:
+- Identify drop-off points in the engagement funnel
+- Detect content misalignment issues
+- Find technical or timing problems
+- Recommend funnel optimization strategies
 
-5. Actionable Recommendations: Provide specific, prioritized recommendations that can be implemented immediately.
+4. TEMPORAL PERFORMANCE MAPPING
+Build comprehensive time-based insights:
+- Identify best performing days and hours
+- Detect seasonal patterns and trends
+- Calculate revenue impact of timing optimization
+- Provide specific scheduling recommendations
 
-6. Revenue Optimization: Identify opportunities to increase revenue per email and overall campaign ROI.
+5. CAMPAIGN HEALTH MONITORING SYSTEM
+Assess account health and predict risks:
+- Calculate overall health score (0-100)
+- Identify negative metric trends
+- Predict future deliverability issues
+- Provide preventive action recommendations
+
+6. REVENUE PREDICTION ENGINE
+Build predictive models for future campaigns:
+- Forecast performance for different campaign types
+- Provide confidence levels for predictions
+- Identify growth opportunities
+- Highlight potential risk factors
 
 REQUIRED JSON OUTPUT FORMAT (respond with valid JSON only, no other text):
 {
@@ -281,13 +313,86 @@ REQUIRED JSON OUTPUT FORMAT (respond with valid JSON only, no other text):
     "avg_clv": "formatted_clv",
     "opportunity": "high|medium|low"
   },
+  "subject_line_intelligence": {
+    "key_patterns": [
+      {
+        "pattern": "specific pattern (e.g., 'Questions in subject lines')",
+        "impact": "clear description of impact",
+        "example": "concrete example subject line",
+        "performance_increase": numeric_percentage
+      }
+    ],
+    "winning_elements": ["element1", "element2", "element3"],
+    "avoid_elements": ["avoid1", "avoid2", "avoid3"],
+    "optimal_length": "X-Y characters",
+    "performance_comparison": [
+      {
+        "winning_pattern": "successful pattern description",
+        "losing_pattern": "unsuccessful pattern description", 
+        "performance_difference": "quantified difference",
+        "key_factors": ["factor1", "factor2", "factor3"]
+      }
+    ]
+  },
+  "audience_size_optimization": {
+    "optimal_ranges": [
+      {
+        "size_range": "X,XXX - X,XXX recipients",
+        "performance_metric": "specific metric value",
+        "improvement": "percentage or quantified improvement",
+        "recommendation": "specific recommendation"
+      }
+    ],
+    "performance_curve": "description of how performance varies with size",
+    "segmentation_opportunities": ["opportunity1", "opportunity2", "opportunity3"]
+  },
+  "temporal_performance": {
+    "best_times": [
+      {
+        "time_period": "specific day/time",
+        "performance_metric": "quantified performance",
+        "opportunity": "specific opportunity description",
+        "revenue_impact": "estimated revenue impact"
+      }
+    ],
+    "seasonal_patterns": ["pattern1", "pattern2", "pattern3"],
+    "optimization_schedule": "recommended sending schedule"
+  },
+  "health_monitoring": {
+    "health_score": numeric_score_0_to_100,
+    "alerts": [
+      {
+        "metric": "specific metric name",
+        "current_status": "current state description",
+        "trend": "trend description",
+        "risk_level": "low|medium|high",
+        "prediction": "future prediction",
+        "action_required": "specific action needed"
+      }
+    ],
+    "risk_assessment": "overall risk assessment",
+    "preventive_actions": ["action1", "action2", "action3"]
+  },
+  "revenue_predictions": {
+    "predictions": [
+      {
+        "campaign_type": "type of campaign",
+        "parameters": "campaign parameters",
+        "predicted_range": "revenue range",
+        "confidence": numeric_confidence_percentage,
+        "factors": ["factor1", "factor2", "factor3"]
+      }
+    ],
+    "growth_opportunities": ["opportunity1", "opportunity2", "opportunity3"],
+    "risk_factors": ["risk1", "risk2", "risk3"]
+  },
   "sending_analysis": {
     "emails_per_month": "calculated_frequency",
     "frequency_assessment": "optimal|under_mailing|over_mailing"
   }
 }
 
-Provide insights based on the actual data patterns you observe. Focus on actionable recommendations that can drive real business results.`;
+CRITICAL: You must provide ALL analysis modules in your response. Focus on actionable, data-driven insights that can drive real business results. Use the actual campaign data to identify specific patterns and opportunities.`;
 
   try {
     // Make request to OpenAI API
