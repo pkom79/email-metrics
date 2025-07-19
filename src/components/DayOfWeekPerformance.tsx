@@ -120,16 +120,24 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
                 stopColor={currentColorScheme.primary} 
           viewBox={`0 0 800 ${chartHeight + 60}`}
           onMouseLeave={() => setHoveredBar(null)}
+        >
+          <defs>
+            <linearGradient id={`barGradient-${selectedMetric}`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop 
+                offset="0%" 
+                stopColor={currentColorScheme.primary} 
+                stopOpacity={0.9}
+              />
               <stop 
                 offset="50%" 
                 stopColor={currentColorScheme.secondary} 
                 stopOpacity={0.9}
               />
-        >
-          <defs>
+              <stop 
+                offset="100%" 
                 stopColor={currentColorScheme.light} 
                 stopOpacity={0.7}
-              <stop offset="100%" stopColor="#059669" stopOpacity={0.9} />
+              />
             </linearGradient>
             
             {/* Drop shadow filter */}
