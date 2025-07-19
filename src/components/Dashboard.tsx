@@ -4,7 +4,6 @@ import MetricCard from './MetricCard';
 import AudienceCharts from './AudienceCharts';
 import DayOfWeekPerformance from './DayOfWeekPerformance';
 import HourOfDayPerformance from './HourOfDayPerformance';
-import AICampaignIntelligence from './AICampaignIntelligence';
 import { 
   ALL_CAMPAIGNS, 
   ALL_FLOW_EMAILS, 
@@ -17,146 +16,13 @@ import {
   ProcessedFlowEmail
 } from '../utils/mockDataGenerator';
 
-interface InsightsData {
-  summary: {
-    overall_health: string;
-    key_metrics: {
-      revenue: string;
-      open_rate: string;
-      click_rate: string;
-      conversion_rate: string;
-    };
-  };
-  trends: {
-    revenue: string;
-    engagement: string;
-    conversion: string;
-  };
-  recommendations: Array<{
-    priority: 'high' | 'medium' | 'low';
-    category: string;
-    action: string;
-    reason: string;
-    impact: string;
-  }>;
-  campaign_insights: any;
-  flow_insights: any;
-  audience_insights: any;
-  sending_analysis: any;
-}
-
 interface DashboardProps {
   onUploadNew: () => void;
   isDarkMode: boolean;
 }
 
-interface InsightsData {
-  summary: {
-    overall_health: string;
-    key_metrics: {
-      revenue: string;
-      open_rate: string;
-      click_rate: string;
-      conversion_rate: string;
-    };
-  };
-  trends: {
-    revenue: string;
-    engagement: string;
-    conversion: string;
-  };
-  recommendations: Array<{
-    priority: 'high' | 'medium' | 'low';
-    category: string;
-    action: string;
-    reason: string;
-    impact: string;
-  }>;
-  campaign_insights: {
-    topPerformer: any;
-    worstPerformer: any;
-  };
-  flow_insights: {
-    topPerformer: any;
-    improvement_needed: any;
-  };
-  audience_insights: {
-    total_subscribers: number;
-    buyer_percentage: string;
-    avg_clv: string;
-    opportunity: string;
-  };
-  sending_analysis: {
-    emails_per_month: string;
-    frequency_assessment: string;
-  };
-  subject_line_intelligence?: {
-    key_patterns: Array<{
-      pattern: string;
-      impact: string;
-      example: string;
-      performance_increase: number;
-    }>;
-    winning_elements: string[];
-    avoid_elements: string[];
-    optimal_length: string;
-    performance_comparison: Array<{
-      winning_pattern: string;
-      losing_pattern: string;
-      performance_difference: string;
-      key_factors: string[];
-    }>;
-  };
-  audience_size_optimization?: {
-    optimal_ranges: Array<{
-      size_range: string;
-      performance_metric: string;
-      improvement: string;
-      recommendation: string;
-    }>;
-    performance_curve: string;
-    segmentation_opportunities: string[];
-  };
-  temporal_performance?: {
-    best_times: Array<{
-      time_period: string;
-      performance_metric: string;
-      opportunity: string;
-      revenue_impact: string;
-    }>;
-    seasonal_patterns: string[];
-    optimization_schedule: string;
-  };
-  health_monitoring?: {
-    health_score: number;
-    alerts: Array<{
-      metric: string;
-      current_status: string;
-      trend: string;
-      risk_level: 'low' | 'medium' | 'high';
-      prediction: string;
-      action_required: string;
-    }>;
-    risk_assessment: string;
-    preventive_actions: string[];
-  };
-  revenue_predictions?: {
-    predictions: Array<{
-      campaign_type: string;
-      parameters: string;
-      predicted_range: string;
-      confidence: number;
-      factors: string[];
-    }>;
-    growth_opportunities: string[];
-    risk_factors: string[];
-  };
-}
-
 const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   const [dateRange, setDateRange] = useState('30d');
-  const [insights, setInsights] = useState<InsightsData | null>(null);
-  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
 
   // Filter data based on date range
   const { filteredCampaigns, filteredFlows, filteredSubscribers } = useMemo(() => {
@@ -299,60 +165,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
 
   // Get audience insights
   const audienceInsights = getAudienceInsights();
-
-  const handleGetInsights = async () => {
-    setIsLoadingInsights(true);
-    
-    try {
-      // Prepare data for AI analysis
-      const topCampaigns = [...filteredCampaigns]
-        .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 5);
-      
-      const bottomCampaigns = [...filteredCampaigns]
-        .sort((a, b) => a.revenue - b.revenue)
-        .slice(0, 5);
-      
-      const topFlows = [...filteredFlows]
-        .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 5);
-      
-      const bottomFlows = [...filteredFlows]
-        .sort((a, b) => a.revenue - b.revenue)
-        .slice(0, 5);
-
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-email-data`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          currentPeriod: currentPeriodMetrics,
-          previousPeriod: previousPeriodMetrics,
-          topCampaigns,
-          bottomCampaigns,
-          topFlows,
-          bottomFlows,
-          audienceInsights,
-          dateRange
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setInsights(data.insights);
-    } catch (error) {
-      console.error('Error fetching insights:', error);
-      // Handle error - maybe show a toast or error message
-    } finally {
-      setIsLoadingInsights(false);
-    }
-  };
-
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -563,43 +375,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
           />
         </div>
 
-        {/* AI Campaign Intelligence Section */}
-        <AICampaignIntelligence
-          insights={insights}
-          isLoading={isLoadingInsights}
-          onGetInsights={handleGetInsights}
-          isDarkMode={isDarkMode}
-          currentPeriodMetrics={currentPeriodMetrics}
-          previousPeriodMetrics={previousPeriodMetrics}
-          audienceInsights={audienceInsights}
-        />
-        <div className="grid lg:grid-cols-1 gap-8 mb-8">
-          <AudienceCharts isDarkMode={isDarkMode} />
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-8 mb-8">
-          <DayOfWeekPerformance 
-            filteredCampaigns={filteredCampaigns}
-            isDarkMode={isDarkMode}
-            dateRange={dateRange}
-          />
-          <HourOfDayPerformance 
-            filteredCampaigns={filteredCampaigns}
-            isDarkMode={isDarkMode}
-            dateRange={dateRange}
-          />
-        </div>
-
-        {/* AI Campaign Intelligence Section */}
-        <AICampaignIntelligence
-          insights={insights}
-          isLoading={isLoadingInsights}
-          onGetInsights={handleGetInsights}
-          isDarkMode={isDarkMode}
-          currentPeriodMetrics={currentPeriodMetrics}
-          previousPeriodMetrics={previousPeriodMetrics}
-          audienceInsights={audienceInsights}
-        />
       </div>
     </div>
   );
