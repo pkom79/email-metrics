@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Upload, BarChart3, TrendingUp, TrendingDown, Calendar, Zap, Users, Mail, Target, DollarSign, Eye, MousePointer, ShoppingCart, UserX, AlertTriangle, Fence as Bounce, CheckCircle, ArrowUp, ArrowDown, MessageSquare, Clock, Shield, Lightbulb, Star, Brain, Sparkles, ChevronRight, Award, Activity } from 'lucide-react';
+import { Upload, BarChart3 } from 'lucide-react';
 import MetricCard from './MetricCard';
 import AudienceCharts from './AudienceCharts';
 import DayOfWeekPerformance from './DayOfWeekPerformance';
 import HourOfDayPerformance from './HourOfDayPerformance';
+import AICampaignIntelligence from './AICampaignIntelligence';
 import AICampaignIntelligence from './AICampaignIntelligence';
 import { 
   ALL_CAMPAIGNS, 
@@ -16,6 +17,34 @@ import {
   ProcessedCampaign,
   ProcessedFlowEmail
 } from '../utils/mockDataGenerator';
+
+interface InsightsData {
+  summary: {
+    overall_health: string;
+    key_metrics: {
+      revenue: string;
+      open_rate: string;
+      click_rate: string;
+      conversion_rate: string;
+    };
+  };
+  trends: {
+    revenue: string;
+    engagement: string;
+    conversion: string;
+  };
+  recommendations: Array<{
+    priority: 'high' | 'medium' | 'low';
+    category: string;
+    action: string;
+    reason: string;
+    impact: string;
+  }>;
+  campaign_insights: any;
+  flow_insights: any;
+  audience_insights: any;
+  sending_analysis: any;
+}
 
 interface DashboardProps {
   onUploadNew: () => void;
@@ -127,6 +156,8 @@ interface InsightsData {
 
 const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   const [dateRange, setDateRange] = useState('30d');
+  const [insights, setInsights] = useState<InsightsData | null>(null);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
   const [insights, setInsights] = useState<InsightsData | null>(null);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
 
@@ -271,6 +302,59 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
 
   // Get audience insights
   const audienceInsights = getAudienceInsights();
+
+  const handleGetInsights = async () => {
+    setIsLoadingInsights(true);
+    
+    try {
+      // Prepare data for AI analysis
+      const topCampaigns = [...filteredCampaigns]
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5);
+      
+      const bottomCampaigns = [...filteredCampaigns]
+        .sort((a, b) => a.revenue - b.revenue)
+        .slice(0, 5);
+      
+      const topFlows = [...filteredFlows]
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5);
+      
+      const bottomFlows = [...filteredFlows]
+        .sort((a, b) => a.revenue - b.revenue)
+        .slice(0, 5);
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-email-data`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentPeriod: currentPeriodMetrics,
+          previousPeriod: previousPeriodMetrics,
+          topCampaigns,
+          bottomCampaigns,
+          topFlows,
+          bottomFlows,
+          audienceInsights,
+          dateRange
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setInsights(data.insights);
+    } catch (error) {
+      console.error('Error fetching insights:', error);
+      // Handle error - maybe show a toast or error message
+    } finally {
+      setIsLoadingInsights(false);
+    }
+  };
 
   const handleGetInsights = async () => {
     setIsLoadingInsights(true);
@@ -517,6 +601,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
         </div>
 
         {/* Charts and Analytics */}
+        <div className="grid lg:grid-cols-1 gap-8 mb-8">
+          <AudienceCharts isDarkMode={isDarkMode} />
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-8 mb-8">
+          <DayOfWeekPerformance 
+            filteredCampaigns={filteredCampaigns}
+            isDarkMode={isDarkMode}
+            dateRange={dateRange}
+          />
+          <HourOfDayPerformance 
+            filteredCampaigns={filteredCampaigns}
+            isDarkMode={isDarkMode}
+            dateRange={dateRange}
+          />
+        </div>
+
+        {/* AI Campaign Intelligence Section */}
+        <AICampaignIntelligence
+          insights={insights}
+          isLoading={isLoadingInsights}
+          onGetInsights={handleGetInsights}
+          isDarkMode={isDarkMode}
+          currentPeriodMetrics={currentPeriodMetrics}
+          previousPeriodMetrics={previousPeriodMetrics}
+          audienceInsights={audienceInsights}
+        />
         <div className="grid lg:grid-cols-1 gap-8 mb-8">
           <AudienceCharts isDarkMode={isDarkMode} />
         </div>
