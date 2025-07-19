@@ -25,8 +25,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   // Create a stable reference date that won't change
   const REFERENCE_DATE = React.useMemo(() => new Date('2025-01-18T10:00:00'), []);
 
-  // Get unique flow names
-  const uniqueFlowNames = React.useMemo(() => {
+      
+      // Check if audience section is currently visible in viewport
+      if (audienceOverviewRef.current) {
+        const rect = audienceOverviewRef.current.getBoundingClientRect();
+        const isAudienceVisible = rect.top <= 100; // If audience section is at or above the sticky position
+        
+        const shouldBeSticky = scrollY > 100 && !isAudienceVisible;
+        setIsSticky(shouldBeSticky);
+      } else {
+        setIsSticky(scrollY > 100);
+      }
     return getUniqueFlowNames();
   }, []);
 
@@ -296,28 +305,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Reset displayed campaigns when metric changes
-  React.useEffect(() => {
-    setDisplayedCampaigns(5);
-  }, [selectedCampaignMetric]);
-
-  const dateRangeOptions = [
-    { value: '30d', label: '30d' },
-    { value: '60d', label: '60d' },
-    { value: '90d', label: '90d' },
-    { value: '120d', label: '120d' },
-    { value: '180d', label: '180d' },
-    { value: '365d', label: '365d' },
-    { value: 'all', label: 'All Time' }
-  ];
-
-  const formatCurrency = (value: number) => `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const formatPercent = (value: number) => `${value.toFixed(1)}%`;
-  const formatNumber = (value: number) => value.toLocaleString('en-US');
-  
-  const formatDateTime = (date: Date) => {
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
     const year = String(date.getFullYear()).slice(-2);
     const hours = date.getHours();
     const minutes = String(date.getMinutes()).padStart(2, '0');
