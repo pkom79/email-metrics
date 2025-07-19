@@ -157,8 +157,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   const [dateRange, setDateRange] = useState('30d');
   const [insights, setInsights] = useState<InsightsData | null>(null);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
-  const [insights, setInsights] = useState<InsightsData | null>(null);
-  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
 
   // Filter data based on date range
   const { filteredCampaigns, filteredFlows, filteredSubscribers } = useMemo(() => {
