@@ -25,6 +25,34 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   // Create a stable reference date that won't change
   const REFERENCE_DATE = React.useMemo(() => new Date('2025-01-18T10:00:00'), []);
 
+  const dateRangeOptions = [
+    { value: '7d', label: 'Last 7 days' },
+    { value: '30d', label: 'Last 30 days' },
+    { value: '90d', label: 'Last 90 days' },
+    { value: '365d', label: 'Last year' },
+    { value: 'all', label: 'All time' }
+  ];
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  const formatPercent = (value: number) => {
+    return `${value.toFixed(1)}%`;
+  };
+
+  const formatNumber = (value: number) => {
+    return new Intl.NumberFormat('en-US').format(Math.round(value));
+  };
+
+  const audienceOverviewRef = React.useRef<HTMLDivElement>(null);
+
+  const uniqueFlowNames = React.useMemo(() => {
       
       // Check if audience section is currently visible in viewport
       if (audienceOverviewRef.current) {
@@ -305,6 +333,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const formatDateTime = (date: Date) => {
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
     const year = String(date.getFullYear()).slice(-2);
     const hours = date.getHours();
     const minutes = String(date.getMinutes()).padStart(2, '0');
@@ -554,7 +585,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
             </div>
           </div>
         </div>
-        </div>
+      </div>
 
       {/* Data Coverage Notice Banner - Non-sticky */}
       <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-white'} py-6`}>
