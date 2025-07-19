@@ -48,11 +48,12 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
   };
 
   const maxValue = Math.max(...dayOfWeekData.map(d => d.value));
-  const chartHeight = 200;
+  const chartHeight = 280;
   const chartWidth = 560;
-  const barWidth = 60;
-  const barSpacing = 20;
-  const startX = 40;
+  const barHeight = 30;
+  const barSpacing = 10;
+  const startY = 40;
+  const labelWidth = 50;
 
   return (
     <div className={`
@@ -94,7 +95,7 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
       <div className="relative">
         <svg 
           width={chartWidth} 
-          height={chartHeight + 60} 
+          height={chartHeight + 40} 
           className="w-full"
           onMouseLeave={() => setHoveredBar(null)}
         >
@@ -105,34 +106,37 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
             </linearGradient>
           </defs>
           
-          {/* Y-axis labels */}
+          {/* X-axis labels */}
           {[0, 0.25, 0.5, 0.75, 1].map((ratio, index) => {
-            const y = chartHeight - (ratio * chartHeight) + 10;
+            const x = labelWidth + (ratio * (chartWidth - labelWidth - 20));
             const value = maxValue * ratio;
             return (
               <g key={index}>
+                {/* Tick marks */}
                 <line
-                  x1={startX - 5}
-                  y1={y}
-                  x2={startX}
-                  y2={y}
+                  x1={x}
+                  y1={chartHeight + 15}
+                  x2={x}
+                  y2={chartHeight + 20}
                   stroke={isDarkMode ? '#6b7280' : '#9ca3af'}
                   strokeWidth={1}
                 />
+                {/* Labels */}
                 <text
-                  x={startX - 10}
-                  y={y + 4}
-                  textAnchor="end"
+                  x={x}
+                  y={chartHeight + 35}
+                  textAnchor="middle"
                   className={`text-xs ${isDarkMode ? 'fill-gray-400' : 'fill-gray-500'}`}
                 >
                   {formatMetricValue(value, selectedMetric)}
                 </text>
+                {/* Grid lines */}
                 {ratio > 0 && (
                   <line
-                    x1={startX}
-                    y1={y}
-                    x2={chartWidth - 20}
-                    y2={y}
+                    x1={x}
+                    y1={startY}
+                    x2={x}
+                    y2={chartHeight + 15}
                     stroke={isDarkMode ? '#374151' : '#f3f4f6'}
                     strokeWidth={1}
                     strokeDasharray="2,2"
@@ -144,9 +148,9 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
 
           {/* Bars */}
           {dayOfWeekData.map((data, index) => {
-            const x = startX + (index * (barWidth + barSpacing));
-            const barHeight = maxValue > 0 ? (data.value / maxValue) * chartHeight : 0;
-            const y = chartHeight - barHeight + 10;
+            const y = startY + (index * (barHeight + barSpacing));
+            const barWidth = maxValue > 0 ? (data.value / maxValue) * (chartWidth - labelWidth - 40) : 0;
+            const x = labelWidth;
             
             return (
               <g key={data.day}>
@@ -154,8 +158,8 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
                 <rect
                   x={x}
                   y={y}
-                  width={barWidth}
-                  height={Math.max(barHeight, 2)} // Minimum height for zero values
+                  width={Math.max(barWidth, 2)} // Minimum width for zero values
+                  height={barHeight}
                   fill={data.campaignCount === 0 ? (isDarkMode ? '#374151' : '#e5e7eb') : 'url(#barGradient)'}
                   className="cursor-pointer transition-opacity duration-200 hover:opacity-80"
                   onMouseEnter={() => setHoveredBar({
@@ -165,11 +169,11 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
                   })}
                 />
                 
-                {/* X-axis labels */}
+                {/* Y-axis labels (day names) */}
                 <text
-                  x={x + barWidth / 2}
-                  y={chartHeight + 30}
-                  textAnchor="middle"
+                  x={labelWidth - 10}
+                  y={y + barHeight / 2 + 4}
+                  textAnchor="end"
                   className={`text-sm font-medium ${isDarkMode ? 'fill-gray-300' : 'fill-gray-700'}`}
                 >
                   {data.day}
@@ -178,22 +182,22 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
             );
           })}
 
-          {/* Y-axis line */}
+          {/* Y-axis line (vertical) */}
           <line
-            x1={startX}
-            y1={10}
-            x2={startX}
-            y2={chartHeight + 10}
+            x1={labelWidth}
+            y1={startY}
+            x2={labelWidth}
+            y2={chartHeight + 15}
             stroke={isDarkMode ? '#6b7280' : '#9ca3af'}
             strokeWidth={2}
           />
 
-          {/* X-axis line */}
+          {/* X-axis line (horizontal) */}
           <line
-            x1={startX}
-            y1={chartHeight + 10}
+            x1={labelWidth}
+            y1={chartHeight + 15}
             x2={chartWidth - 20}
-            y2={chartHeight + 10}
+            y2={chartHeight + 15}
             stroke={isDarkMode ? '#6b7280' : '#9ca3af'}
             strokeWidth={2}
           />
@@ -210,8 +214,8 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
             transform -translate-x-1/2 -translate-y-full
           `}
           style={{
-            left: `${((dayOfWeekData.findIndex(d => d.day === hoveredBar.day) * (barWidth + barSpacing)) + startX + barWidth / 2) / chartWidth * 100}%`,
-            top: '10px'
+            left: `${(labelWidth + (hoveredBar.value / maxValue) * (chartWidth - labelWidth - 40) / 2) / chartWidth * 100}%`,
+            top: `${startY + (dayOfWeekData.findIndex(d => d.day === hoveredBar.day) * (barHeight + barSpacing)) + barHeight / 2 - 30}px`
           }}>
             <div className="font-semibold mb-1">{hoveredBar.day}</div>
             <div className="text-green-600 dark:text-green-400 font-medium">
