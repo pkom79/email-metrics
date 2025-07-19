@@ -40,6 +40,7 @@ export interface ProcessedCampaign {
   subject: string;
   sentDate: Date;
   dayOfWeek: number;
+  hourOfDay: number;
   emailsSent: number;
   uniqueOpens: number;
   uniqueClicks: number;
@@ -130,6 +131,7 @@ export const parseCampaignCsvRow = (raw: RawCampaignData, id: number): Processed
     subject: raw.campaign_name,
     sentDate,
     dayOfWeek: sentDate.getDay(),
+    hourOfDay: sentDate.getHours(),
     emailsSent,
     uniqueOpens,
     uniqueClicks,
@@ -564,6 +566,15 @@ export interface DayOfWeekPerformanceData {
   campaignCount: number;
 }
 
+// Interface for hour-of-day performance data
+export interface HourOfDayPerformanceData {
+  hour: number;
+  hourLabel: string;
+  value: number;
+  campaignCount: number;
+  percentageOfTotal: number;
+}
+
 // Function to aggregate campaign performance by day of week
 export const getCampaignPerformanceByDayOfWeek = (
   campaigns: ProcessedCampaign[],
@@ -659,6 +670,122 @@ export const getCampaignPerformanceByDayOfWeek = (
     value,
     campaignCount
   }));
+};
+
+// Function to aggregate campaign performance by hour of day
+export const getCampaignPerformanceByHourOfDay = (
+  campaigns: ProcessedCampaign[],
+  metricKey: string
+): HourOfDayPerformanceData[] => {
+  // Initialize data for all 24 hours
+  const hourData = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    hourLabel: formatHourLabel(hour),
+    value: 0,
+    campaignCount: 0,
+    percentageOfTotal: 0,
+    // Temporary aggregation fields
+    totalRevenue: 0,
+    totalEmailsSent: 0,
+    totalOrders: 0,
+    totalOpens: 0,
+    totalClicks: 0,
+    totalUnsubs: 0,
+    totalSpam: 0,
+    totalBounces: 0
+  }));
+  
+  const totalCampaigns = campaigns.length;
+  
+  // Aggregate data by hour of day
+  campaigns.forEach(campaign => {
+    const hour = campaign.hourOfDay;
+    const hourEntry = hourData[hour];
+    
+    hourEntry.campaignCount++;
+    hourEntry.totalRevenue += campaign.revenue;
+    hourEntry.totalEmailsSent += campaign.emailsSent;
+    hourEntry.totalOrders += campaign.totalOrders;
+    hourEntry.totalOpens += campaign.uniqueOpens;
+    hourEntry.totalClicks += campaign.uniqueClicks;
+    hourEntry.totalUnsubs += campaign.unsubscribesCount;
+    hourEntry.totalSpam += campaign.spamComplaintsCount;
+    hourEntry.totalBounces += campaign.bouncesCount;
+  });
+  
+  // Calculate final metric values and filter out hours with no campaigns
+  const hoursWithData = hourData
+    .filter(hourEntry => hourEntry.campaignCount > 0)
+    .map(hourEntry => {
+      // Calculate percentage of total campaigns
+      hourEntry.percentageOfTotal = totalCampaigns > 0 ? (hourEntry.campaignCount / totalCampaigns) * 100 : 0;
+      
+      // Calculate metric value
+      switch (metricKey) {
+        case 'revenue':
+          hourEntry.value = hourEntry.totalRevenue;
+          break;
+        case 'avgOrderValue':
+          hourEntry.value = hourEntry.totalOrders > 0 ? hourEntry.totalRevenue / hourEntry.totalOrders : 0;
+          break;
+        case 'revenuePerEmail':
+          hourEntry.value = hourEntry.totalEmailsSent > 0 ? hourEntry.totalRevenue / hourEntry.totalEmailsSent : 0;
+          break;
+        case 'openRate':
+          hourEntry.value = hourEntry.totalEmailsSent > 0 ? (hourEntry.totalOpens / hourEntry.totalEmailsSent) * 100 : 0;
+          break;
+        case 'clickRate':
+          hourEntry.value = hourEntry.totalEmailsSent > 0 ? (hourEntry.totalClicks / hourEntry.totalEmailsSent) * 100 : 0;
+          break;
+        case 'clickToOpenRate':
+          hourEntry.value = hourEntry.totalOpens > 0 ? (hourEntry.totalClicks / hourEntry.totalOpens) * 100 : 0;
+          break;
+        case 'emailsSent':
+          hourEntry.value = hourEntry.totalEmailsSent;
+          break;
+        case 'totalOrders':
+          hourEntry.value = hourEntry.totalOrders;
+          break;
+        case 'conversionRate':
+          hourEntry.value = hourEntry.totalClicks > 0 ? (hourEntry.totalOrders / hourEntry.totalClicks) * 100 : 0;
+          break;
+        case 'unsubscribeRate':
+          hourEntry.value = hourEntry.totalEmailsSent > 0 ? (hourEntry.totalUnsubs / hourEntry.totalEmailsSent) * 100 : 0;
+          break;
+        case 'spamRate':
+          hourEntry.value = hourEntry.totalEmailsSent > 0 ? (hourEntry.totalSpam / hourEntry.totalEmailsSent) * 100 : 0;
+          break;
+        case 'bounceRate':
+          hourEntry.value = hourEntry.totalEmailsSent > 0 ? (hourEntry.totalBounces / hourEntry.totalEmailsSent) * 100 : 0;
+          break;
+        default:
+          hourEntry.value = 0;
+      }
+      
+      return {
+        hour: hourEntry.hour,
+        hourLabel: hourEntry.hourLabel,
+        value: hourEntry.value,
+        campaignCount: hourEntry.campaignCount,
+        percentageOfTotal: hourEntry.percentageOfTotal
+      };
+    });
+  
+  // Sort by value (descending), then by hour (ascending) for ties
+  return hoursWithData.sort((a, b) => {
+    if (Math.abs(a.value - b.value) < 0.01) {
+      return a.hour - b.hour; // Secondary sort by hour for ties
+    }
+    return b.value - a.value; // Primary sort by value (descending)
+  });
+};
+
+// Helper function to format hour in 12-hour format
+const formatHourLabel = (hour: number): string => {
+  if (hour === 0) return '12 AM';
+  if (hour < 12) return `${hour} AM`;
+  if (hour === 12) return '12 PM';
+  return `${hour - 12} PM`;
 };
 
 // Helper function to determine granularity based on date range
