@@ -298,7 +298,6 @@ Provide insights based on the actual data patterns you observe. Focus on actiona
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4-turbo-preview',
         model: 'o3',
         messages: [
           {
