@@ -48,12 +48,33 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
   };
 
   const maxValue = Math.max(...dayOfWeekData.map(d => d.value));
-  const chartHeight = 280;
-  const chartWidth = 560;
+  const chartHeight = 320;
   const barHeight = 30;
   const barSpacing = 10;
   const startY = 40;
   const labelWidth = 50;
+  
+  // Color schemes for different metric types
+  const getColorScheme = (metric: string) => {
+    const colorSchemes = {
+      revenue: { primary: '#8b5cf6', secondary: '#a78bfa', light: '#c4b5fd' }, // Purple
+      avgOrderValue: { primary: '#06b6d4', secondary: '#67e8f9', light: '#a7f3d0' }, // Cyan
+      revenuePerEmail: { primary: '#10b981', secondary: '#34d399', light: '#6ee7b7' }, // Emerald
+      openRate: { primary: '#f59e0b', secondary: '#fbbf24', light: '#fde047' }, // Amber
+      clickRate: { primary: '#ef4444', secondary: '#f87171', light: '#fca5a5' }, // Red
+      clickToOpenRate: { primary: '#8b5cf6', secondary: '#a78bfa', light: '#c4b5fd' }, // Purple
+      emailsSent: { primary: '#3b82f6', secondary: '#60a5fa', light: '#93c5fd' }, // Blue
+      totalOrders: { primary: '#10b981', secondary: '#34d399', light: '#6ee7b7' }, // Emerald
+      conversionRate: { primary: '#f97316', secondary: '#fb923c', light: '#fdba74' }, // Orange
+      unsubscribeRate: { primary: '#ef4444', secondary: '#f87171', light: '#fca5a5' }, // Red
+      spamRate: { primary: '#dc2626', secondary: '#ef4444', light: '#f87171' }, // Red (darker)
+      bounceRate: { primary: '#991b1b', secondary: '#dc2626', light: '#ef4444' } // Red (darkest)
+    };
+    
+    return colorSchemes[metric as keyof typeof colorSchemes] || colorSchemes.revenue;
+  };
+  
+  const currentColorScheme = getColorScheme(selectedMetric);
 
   return (
     <div className={`
@@ -92,23 +113,34 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
       </div>
 
       {/* Chart Container */}
-      <div className="relative">
+      <div className="relative w-full">
         <svg 
-          width={chartWidth} 
-          height={chartHeight + 40} 
-          className="w-full"
+          width="100%" 
+          height={chartHeight + 60} 
+                stopColor={currentColorScheme.primary} 
+          viewBox={`0 0 800 ${chartHeight + 60}`}
           onMouseLeave={() => setHoveredBar(null)}
+              <stop 
+                offset="50%" 
+                stopColor={currentColorScheme.secondary} 
+                stopOpacity={0.9}
+              />
         >
           <defs>
-            <linearGradient id="barGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                stopColor={currentColorScheme.light} 
+                stopOpacity={0.7}
               <stop offset="100%" stopColor="#059669" stopOpacity={0.9} />
             </linearGradient>
+            
+            {/* Drop shadow filter */}
+            <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#000000" floodOpacity="0.1"/>
+            </filter>
           </defs>
           
           {/* X-axis labels */}
           {[0, 0.25, 0.5, 0.75, 1].map((ratio, index) => {
-            const x = labelWidth + (ratio * (chartWidth - labelWidth - 20));
+            const x = labelWidth + (ratio * (800 - labelWidth - 40));
             const value = maxValue * ratio;
             return (
               <g key={index}>
@@ -149,7 +181,7 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
           {/* Bars */}
           {dayOfWeekData.map((data, index) => {
             const y = startY + (index * (barHeight + barSpacing));
-            const barWidth = maxValue > 0 ? (data.value / maxValue) * (chartWidth - labelWidth - 40) : 0;
+            const barWidth = maxValue > 0 ? (data.value / maxValue) * (800 - labelWidth - 60) : 0;
             const x = labelWidth;
             
             return (
@@ -160,8 +192,11 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
                   y={y}
                   width={Math.max(barWidth, 2)} // Minimum width for zero values
                   height={barHeight}
-                  fill={data.campaignCount === 0 ? (isDarkMode ? '#374151' : '#e5e7eb') : 'url(#barGradient)'}
-                  className="cursor-pointer transition-opacity duration-200 hover:opacity-80"
+                  fill={data.campaignCount === 0 ? (isDarkMode ? '#374151' : '#e5e7eb') : `url(#barGradient-${selectedMetric})`}
+                  className="cursor-pointer transition-all duration-200 hover:opacity-90"
+                  filter={data.campaignCount > 0 ? "url(#dropShadow)" : "none"}
+                  rx="4"
+                  ry="4"
                   onMouseEnter={() => setHoveredBar({
                     day: data.day,
                     value: data.value,
@@ -188,7 +223,7 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
             y1={startY}
             x2={labelWidth}
             y2={chartHeight + 15}
-            stroke={isDarkMode ? '#6b7280' : '#9ca3af'}
+            stroke={isDarkMode ? '#4b5563' : '#d1d5db'}
             strokeWidth={2}
           />
 
@@ -196,9 +231,9 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
           <line
             x1={labelWidth}
             y1={chartHeight + 15}
-            x2={chartWidth - 20}
+            x2={800 - 40}
             y2={chartHeight + 15}
-            stroke={isDarkMode ? '#6b7280' : '#9ca3af'}
+            stroke={isDarkMode ? '#4b5563' : '#d1d5db'}
             strokeWidth={2}
           />
         </svg>
@@ -206,19 +241,19 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
         {/* Tooltip */}
         {hoveredBar && (
           <div className={`
-            absolute z-10 p-3 rounded-lg shadow-lg border text-sm pointer-events-none
+            absolute z-10 p-3 rounded-lg shadow-xl border text-sm pointer-events-none backdrop-blur-sm
             ${isDarkMode 
-              ? 'bg-gray-800 border-gray-600 text-white' 
-              : 'bg-white border-gray-200 text-gray-900'
+              ? 'bg-gray-800/95 border-gray-600 text-white' 
+              : 'bg-white/95 border-gray-200 text-gray-900'
             }
             transform -translate-x-1/2 -translate-y-full
           `}
           style={{
-            left: `${(labelWidth + (hoveredBar.value / maxValue) * (chartWidth - labelWidth - 40) / 2) / chartWidth * 100}%`,
-            top: `${startY + (dayOfWeekData.findIndex(d => d.day === hoveredBar.day) * (barHeight + barSpacing)) + barHeight / 2 - 30}px`
+            left: `${(labelWidth + (hoveredBar.value / maxValue) * (800 - labelWidth - 60) / 2) / 8}%`,
+            top: `${startY + (dayOfWeekData.findIndex(d => d.day === hoveredBar.day) * (barHeight + barSpacing)) + barHeight / 2 - 20}px`
           }}>
             <div className="font-semibold mb-1">{hoveredBar.day}</div>
-            <div className="text-green-600 dark:text-green-400 font-medium">
+            <div className="font-medium" style={{ color: currentColorScheme.primary }}>
               {formatMetricValue(hoveredBar.value, selectedMetric)}
             </div>
             <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -233,16 +268,16 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
 
       {/* Summary */}
       <div className={`mt-4 pt-4 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
           <div>
             <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total Campaigns</p>
-            <p className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            <p className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
               {dayOfWeekData.reduce((sum, d) => sum + d.campaignCount, 0)}
             </p>
           </div>
           <div>
             <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Best Day</p>
-            <p className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            <p className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
               {(() => {
                 const best = dayOfWeekData.reduce((max, d) => d.value > max.value ? d : max);
                 return best.value > 0 ? best.day : 'N/A';
@@ -251,13 +286,13 @@ const DayOfWeekPerformance: React.FC<DayOfWeekPerformanceProps> = ({
           </div>
           <div>
             <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Peak Value</p>
-            <p className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            <p className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
               {formatMetricValue(maxValue, selectedMetric)}
             </p>
           </div>
           <div>
             <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Date Range</p>
-            <p className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            <p className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
               {dateRange === 'all' ? 'All Time' : dateRange}
             </p>
           </div>
