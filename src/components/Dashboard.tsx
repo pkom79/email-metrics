@@ -4,6 +4,7 @@ import MetricCard from './MetricCard';
 import AudienceCharts from './AudienceCharts';
 import InsightsModal from './InsightsModal';
 import DayOfWeekPerformance from './DayOfWeekPerformance';
+import HourOfDayPerformance from './HourOfDayPerformance';
 import { ALL_CAMPAIGNS, ALL_FLOW_EMAILS, ALL_SUBSCRIBERS, getUniqueFlowNames, getLastEmailDate, getMetricTimeSeries, getGranularityForDateRange, getAggregatedMetricsForPeriod, getAudienceInsights, type ProcessedCampaign, type ProcessedFlowEmail } from '../utils/mockDataGenerator';
 
 interface DashboardProps {
@@ -630,6 +631,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
             {/* Day of Week Performance */}
             <div className="mt-8">
               <DayOfWeekPerformance 
+                filteredCampaigns={filteredCampaigns}
+                isDarkMode={isDarkMode}
+                dateRange={dateRange}
+              />
+            </div>
+
+            {/* Hour of Day Performance */}
+            <div className="mt-8">
+              <HourOfDayPerformance 
                 filteredCampaigns={filteredCampaigns}
                 isDarkMode={isDarkMode}
                 dateRange={dateRange}
