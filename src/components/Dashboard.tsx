@@ -5,7 +5,6 @@ import AudienceCharts from './AudienceCharts';
 import DayOfWeekPerformance from './DayOfWeekPerformance';
 import HourOfDayPerformance from './HourOfDayPerformance';
 import AICampaignIntelligence from './AICampaignIntelligence';
-import AICampaignIntelligence from './AICampaignIntelligence';
 import { 
   ALL_CAMPAIGNS, 
   ALL_FLOW_EMAILS, 
