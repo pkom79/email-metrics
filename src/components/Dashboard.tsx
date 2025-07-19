@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Upload, ArrowUp, ArrowDown, AlertCircle, ChevronDown, Zap } from 'lucide-react';
+import { Calendar, Upload, ArrowUp, ArrowDown, AlertCircle, ChevronDown, Brain } from 'lucide-react';
 import MetricCard from './MetricCard';
 import AudienceCharts from './AudienceCharts';
 import InsightsModal from './InsightsModal';
@@ -18,9 +18,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   const [selectedCampaignMetric, setSelectedCampaignMetric] = useState('revenue');
   const [displayedCampaigns, setDisplayedCampaigns] = useState(5);
   const [isSticky, setIsSticky] = useState(false);
-  const [showInsightsModal, setShowInsightsModal] = useState(false);
-  const [insightsData, setInsightsData] = useState(null);
-  const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
+  const [showAIAnalysis, setShowAIAnalysis] = useState(false);
 
   // Create a stable reference date that won't change
   const REFERENCE_DATE = React.useMemo(() => new Date('2025-01-18T10:00:00'), []);
@@ -51,6 +49,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   };
 
   const audienceOverviewRef = React.useRef<HTMLDivElement>(null);
+  const aiSectionRef = React.useRef<HTMLDivElement>(null);
 
   const uniqueFlowNames = React.useMemo(() => {
     return getUniqueFlowNames();
@@ -384,112 +383,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
     setDisplayedCampaigns(prev => Math.min(prev + 5, sortedCampaigns.length));
   };
 
-  const generateInsights = async () => {
-    setIsGeneratingInsights(true);
-    setShowInsightsModal(true);
-    
-    try {
-      // Calculate current period metrics
-      const endDate = new Date(REFERENCE_DATE);
-      let startDate = new Date(endDate);
-      
-      if (dateRange === 'all') {
-        const oldestCampaign = Math.min(...ALL_CAMPAIGNS.map(c => c.sentDate.getTime()));
-        const oldestFlow = Math.min(...ALL_FLOW_EMAILS.map(f => f.sentDate.getTime()));
-        startDate = new Date(Math.min(oldestCampaign, oldestFlow));
-      } else {
-        const days = parseInt(dateRange.replace('d', ''));
-        startDate.setDate(startDate.getDate() - days);
-      }
-      
-      const currentPeriod = getAggregatedMetricsForPeriod(ALL_CAMPAIGNS, ALL_FLOW_EMAILS, startDate, endDate);
-      
-      // Calculate previous period for comparison
-      const periodLength = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-      const prevEndDate = new Date(startDate);
-      const prevStartDate = new Date(prevEndDate);
-      prevStartDate.setDate(prevStartDate.getDate() - periodLength);
-      
-      const previousPeriod = getAggregatedMetricsForPeriod(ALL_CAMPAIGNS, ALL_FLOW_EMAILS, prevStartDate, prevEndDate);
-      
-      // Get top and bottom performers
-      const topCampaigns = [...filteredCampaigns]
-        .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 3);
-      
-      const bottomCampaigns = [...filteredCampaigns]
-        .sort((a, b) => a.revenue - b.revenue)
-        .slice(0, 3);
-      
-      // Get flow performance data grouped by flow name
-      const flowsByName = filteredFlowEmails.reduce((acc, email) => {
-        if (!acc[email.flowName]) {
-          acc[email.flowName] = {
-            flowName: email.flowName,
-            totalRevenue: 0,
-            totalEmailsSent: 0,
-            totalOpens: 0,
-            totalClicks: 0,
-            totalOrders: 0
-          };
-        }
-        
-        acc[email.flowName].totalRevenue += email.revenue;
-        acc[email.flowName].totalEmailsSent += email.emailsSent;
-        acc[email.flowName].totalOpens += email.uniqueOpens;
-        acc[email.flowName].totalClicks += email.uniqueClicks;
-        acc[email.flowName].totalOrders += email.totalOrders;
-        
-        return acc;
-      }, {} as Record<string, any>);
-      
-      const flows = Object.values(flowsByName).map((flow: any) => ({
-        ...flow,
-        openRate: flow.totalEmailsSent > 0 ? (flow.totalOpens / flow.totalEmailsSent) * 100 : 0,
-        revenue: flow.totalRevenue
-      }));
-      
-      const topFlows = flows.sort((a, b) => b.revenue - a.revenue).slice(0, 3);
-      const bottomFlows = flows.sort((a, b) => a.revenue - b.revenue).slice(0, 3);
-      
-      // Get audience insights
-      const audienceInsights = getAudienceInsights();
-      
-      // Prepare data for API call
-      const payload = {
-        currentPeriod,
-        previousPeriod,
-        topCampaigns,
-        bottomCampaigns,
-        topFlows,
-        bottomFlows,
-        audienceInsights,
-        dateRange
-      };
-      
-      // Call the edge function
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-email-data`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to generate insights');
-      }
-      
-      const data = await response.json();
-      setInsightsData(data.insights);
-      
-    } catch (error) {
-      console.error('Error generating insights:', error);
-      setInsightsData(null);
-    } finally {
-      setIsGeneratingInsights(false);
-    }
+  const scrollToAISection = () => {
+    aiSectionRef.current?.scrollIntoView({ 
+      behavior: 'smooth',
+      block: 'start'
+    });
   };
 
   return (
@@ -531,29 +429,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
               </button>
               
               <button
-                onClick={generateInsights}
-                disabled={isGeneratingInsights}
+                onClick={scrollToAISection}
                 className={`
                   px-4 py-1.5 rounded-md text-sm font-semibold transition-all duration-200
-                  ${isGeneratingInsights
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 hover:shadow-md'
-                  }
+                  bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 hover:shadow-md
                   text-white
                 `}
               >
                 <div className="flex items-center gap-1.5">
-                  {isGeneratingInsights ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Analyzing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-3.5 h-3.5" />
-                      <span>Get AI Insights</span>
-                    </>
-                  )}
+                  <Brain className="w-3.5 h-3.5" />
+                  <span>Get AI Insights</span>
                 </div>
               </button>
             </div>
@@ -692,7 +577,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                  <Brain className="w-12 h-12 text-white" />
                 </div>
               </div>
 
@@ -750,16 +635,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
               </div>
             </div>
           </section>
-
+                Advanced analytics powered by artificial intelligence
           {/* Flow Performance */}
           <section>
             <div className="flex items-center justify-between mb-4">
-              <h2 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                Flow Performance
+                Transform your entire email marketing account into actionable business intelligence. Our AI 
+                analyzes patterns across campaigns, flows, audience segments, and subscriber behavior to identify opportunities that would be 
               </h2>
               <select
                 value={selectedFlow}
                 onChange={(e) => setSelectedFlow(e.target.value)}
+                onClick={() => setShowAIAnalysis(!showAIAnalysis)}
                 className={`px-3 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'} focus:ring-2 focus:ring-purple-500 focus:border-transparent`}
               >
                 <option value="all">All Flows</option>
@@ -790,7 +676,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
           </div>
 
           {/* AI Campaign Intelligence */}
-          <section>
+          <section ref={aiSectionRef} className={`
             <div className={`
               ${isDarkMode ? 'bg-gradient-to-br from-purple-900/20 to-indigo-900/20 border-purple-800/30' : 'bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200/50'} 
               border rounded-2xl p-8 text-center
@@ -837,23 +723,28 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
                     </svg>
                   </div>
                   
-                  {/* Button glow effect */}
+                <Brain className="w-5 h-5" />
                   <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-600 to-purple-700 blur-xl opacity-0 group-hover:opacity-30 transition-opacity duration-300 -z-10" />
                 </button>
               </div>
+              
+              {showAIAnalysis && (
+                <div className={`
+                  mt-8 p-6 rounded-xl border
+                  ${isDarkMode 
+                    ? 'bg-gray-800/50 border-gray-700' 
+                    : 'bg-white/70 border-gray-200'
+                  }
+                `}>
+                  <p className={`text-lg ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                    AI Analysis section - Content coming soon...
+                  </p>
+                </div>
+              )}
             </div>
           </section>
         </div>
       </div>
-      
-      {/* Insights Modal */}
-      <InsightsModal
-        isOpen={showInsightsModal}
-        onClose={() => setShowInsightsModal(false)}
-        insights={insightsData}
-        isDarkMode={isDarkMode}
-        isLoading={isGeneratingInsights}
-      />
     </div>
   );
 };
