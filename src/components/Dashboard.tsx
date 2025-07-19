@@ -53,17 +53,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   const audienceOverviewRef = React.useRef<HTMLDivElement>(null);
 
   const uniqueFlowNames = React.useMemo(() => {
-      
-      // Check if audience section is currently visible in viewport
-      if (audienceOverviewRef.current) {
-        const rect = audienceOverviewRef.current.getBoundingClientRect();
-        const isAudienceVisible = rect.top <= 100; // If audience section is at or above the sticky position
-        
-        const shouldBeSticky = scrollY > 100 && !isAudienceVisible;
-        setIsSticky(shouldBeSticky);
-      } else {
-        setIsSticky(scrollY > 100);
-      }
     return getUniqueFlowNames();
   }, []);
 
@@ -327,8 +316,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
 
   React.useEffect(() => {
     const handleScroll = () => {
-      setIsSticky(window.scrollY > 200);
+      const scrollY = window.scrollY;
+      
+      // Check if audience section is currently visible in viewport
+      if (audienceOverviewRef.current) {
+        const rect = audienceOverviewRef.current.getBoundingClientRect();
+        const isAudienceVisible = rect.top <= 100; // If audience section is at or above the sticky position
+        
+        const shouldBeSticky = scrollY > 100 && !isAudienceVisible;
+        setIsSticky(shouldBeSticky);
+      } else {
+        setIsSticky(scrollY > 100);
+      }
     };
+    
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -784,7 +785,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
           </section>
 
           {/* Audience Overview */}
-          <AudienceCharts isDarkMode={isDarkMode} />
+          <div ref={audienceOverviewRef}>
+            <AudienceCharts isDarkMode={isDarkMode} />
+          </div>
         </div>
       </div>
       
