@@ -788,6 +788,61 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
           <div ref={audienceOverviewRef}>
             <AudienceCharts isDarkMode={isDarkMode} />
           </div>
+
+          {/* AI Campaign Intelligence */}
+          <section>
+            <div className={`
+              ${isDarkMode ? 'bg-gradient-to-br from-purple-900/20 to-indigo-900/20 border-purple-800/30' : 'bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200/50'} 
+              border rounded-2xl p-8 text-center
+            `}>
+              <div className="max-w-4xl mx-auto">
+                {/* Icon and Title */}
+                <div className="flex items-center justify-center mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-700 rounded-2xl flex items-center justify-center shadow-lg">
+                      <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <h2 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        AI Campaign Intelligence
+                      </h2>
+                      <p className={`text-lg ${isDarkMode ? 'text-purple-300' : 'text-purple-600'} mt-1`}>
+                        Advanced analytics powered by artificial intelligence
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <p className={`
+                  text-xl leading-relaxed mb-8 max-w-3xl mx-auto
+                  ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}
+                `}>
+                  Transform your Klaviyo campaign data into actionable business intelligence. Our AI 
+                  analyzes patterns across all your campaigns to identify opportunities that would be 
+                  impossible to spot manually.
+                </p>
+
+                {/* CTA Button */}
+                <button className="group relative px-8 py-4 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                    </svg>
+                    <span className="text-lg">Start AI Analysis</span>
+                    <svg className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
+                    </svg>
+                  </div>
+                  
+                  {/* Button glow effect */}
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-600 to-purple-700 blur-xl opacity-0 group-hover:opacity-30 transition-opacity duration-300 -z-10" />
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
       
