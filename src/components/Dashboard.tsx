@@ -3,6 +3,7 @@ import { Calendar, Upload, ArrowUp, ArrowDown, AlertCircle, ChevronDown, Zap } f
 import MetricCard from './MetricCard';
 import AudienceCharts from './AudienceCharts';
 import InsightsModal from './InsightsModal';
+import DayOfWeekPerformance from './DayOfWeekPerformance';
 import { ALL_CAMPAIGNS, ALL_FLOW_EMAILS, ALL_SUBSCRIBERS, getUniqueFlowNames, getLastEmailDate, getMetricTimeSeries, getGranularityForDateRange, getAggregatedMetricsForPeriod, getAudienceInsights, type ProcessedCampaign, type ProcessedFlowEmail } from '../utils/mockDataGenerator';
 
 interface DashboardProps {
@@ -624,6 +625,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
               <MetricCard title="Unsubscribe Rate" value={formatPercent(campaignMetrics.unsubscribeRate.value)} change={campaignMetrics.unsubscribeRate.change} isPositive={campaignMetrics.unsubscribeRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="unsubscribeRate" isNegativeMetric sparklineData={campaignSparklineData.unsubscribeRate} />
               <MetricCard title="Spam Rate" value={formatPercent(campaignMetrics.spamRate.value)} change={campaignMetrics.spamRate.change} isPositive={campaignMetrics.spamRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="spamRate" isNegativeMetric sparklineData={campaignSparklineData.spamRate} />
               <MetricCard title="Bounce Rate" value={formatPercent(campaignMetrics.bounceRate.value)} change={campaignMetrics.bounceRate.change} isPositive={campaignMetrics.bounceRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="bounceRate" isNegativeMetric sparklineData={campaignSparklineData.bounceRate} />
+            </div>
+
+            {/* Day of Week Performance */}
+            <div className="mt-8">
+              <DayOfWeekPerformance 
+                filteredCampaigns={filteredCampaigns}
+                isDarkMode={isDarkMode}
+                dateRange={dateRange}
+              />
             </div>
 
             {/* Top 5 Campaigns */}

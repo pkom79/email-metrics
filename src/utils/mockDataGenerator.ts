@@ -39,6 +39,7 @@ export interface ProcessedCampaign {
   id: number;
   subject: string;
   sentDate: Date;
+  dayOfWeek: number;
   emailsSent: number;
   uniqueOpens: number;
   uniqueClicks: number;
@@ -128,6 +129,7 @@ export const parseCampaignCsvRow = (raw: RawCampaignData, id: number): Processed
     id,
     subject: raw.campaign_name,
     sentDate,
+    dayOfWeek: sentDate.getDay(),
     emailsSent,
     uniqueOpens,
     uniqueClicks,
@@ -552,6 +554,111 @@ export const getMetricTimeSeries = (
   });
   
   return timeSeriesData;
+};
+
+// Interface for day-of-week performance data
+export interface DayOfWeekPerformanceData {
+  day: string;
+  dayIndex: number;
+  value: number;
+  campaignCount: number;
+}
+
+// Function to aggregate campaign performance by day of week
+export const getCampaignPerformanceByDayOfWeek = (
+  campaigns: ProcessedCampaign[],
+  metricKey: string
+): DayOfWeekPerformanceData[] => {
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  
+  // Initialize data for all days
+  const dayData = dayNames.map((day, index) => ({
+    day,
+    dayIndex: index,
+    value: 0,
+    campaignCount: 0,
+    // Temporary aggregation fields
+    totalRevenue: 0,
+    totalEmailsSent: 0,
+    totalOrders: 0,
+    totalOpens: 0,
+    totalClicks: 0,
+    totalUnsubs: 0,
+    totalSpam: 0,
+    totalBounces: 0
+  }));
+  
+  // Aggregate data by day of week
+  campaigns.forEach(campaign => {
+    const dayIndex = campaign.dayOfWeek;
+    const dayEntry = dayData[dayIndex];
+    
+    dayEntry.campaignCount++;
+    dayEntry.totalRevenue += campaign.revenue;
+    dayEntry.totalEmailsSent += campaign.emailsSent;
+    dayEntry.totalOrders += campaign.totalOrders;
+    dayEntry.totalOpens += campaign.uniqueOpens;
+    dayEntry.totalClicks += campaign.uniqueClicks;
+    dayEntry.totalUnsubs += campaign.unsubscribesCount;
+    dayEntry.totalSpam += campaign.spamComplaintsCount;
+    dayEntry.totalBounces += campaign.bouncesCount;
+  });
+  
+  // Calculate final metric values
+  dayData.forEach(dayEntry => {
+    if (dayEntry.campaignCount === 0) {
+      dayEntry.value = 0;
+      return;
+    }
+    
+    switch (metricKey) {
+      case 'revenue':
+        dayEntry.value = dayEntry.totalRevenue;
+        break;
+      case 'avgOrderValue':
+        dayEntry.value = dayEntry.totalOrders > 0 ? dayEntry.totalRevenue / dayEntry.totalOrders : 0;
+        break;
+      case 'revenuePerEmail':
+        dayEntry.value = dayEntry.totalEmailsSent > 0 ? dayEntry.totalRevenue / dayEntry.totalEmailsSent : 0;
+        break;
+      case 'openRate':
+        dayEntry.value = dayEntry.totalEmailsSent > 0 ? (dayEntry.totalOpens / dayEntry.totalEmailsSent) * 100 : 0;
+        break;
+      case 'clickRate':
+        dayEntry.value = dayEntry.totalEmailsSent > 0 ? (dayEntry.totalClicks / dayEntry.totalEmailsSent) * 100 : 0;
+        break;
+      case 'clickToOpenRate':
+        dayEntry.value = dayEntry.totalOpens > 0 ? (dayEntry.totalClicks / dayEntry.totalOpens) * 100 : 0;
+        break;
+      case 'emailsSent':
+        dayEntry.value = dayEntry.totalEmailsSent;
+        break;
+      case 'totalOrders':
+        dayEntry.value = dayEntry.totalOrders;
+        break;
+      case 'conversionRate':
+        dayEntry.value = dayEntry.totalClicks > 0 ? (dayEntry.totalOrders / dayEntry.totalClicks) * 100 : 0;
+        break;
+      case 'unsubscribeRate':
+        dayEntry.value = dayEntry.totalEmailsSent > 0 ? (dayEntry.totalUnsubs / dayEntry.totalEmailsSent) * 100 : 0;
+        break;
+      case 'spamRate':
+        dayEntry.value = dayEntry.totalEmailsSent > 0 ? (dayEntry.totalSpam / dayEntry.totalEmailsSent) * 100 : 0;
+        break;
+      case 'bounceRate':
+        dayEntry.value = dayEntry.totalEmailsSent > 0 ? (dayEntry.totalBounces / dayEntry.totalEmailsSent) * 100 : 0;
+        break;
+      default:
+        dayEntry.value = 0;
+    }
+  });
+  
+  return dayData.map(({ day, dayIndex, value, campaignCount }) => ({
+    day,
+    dayIndex,
+    value,
+    campaignCount
+  }));
 };
 
 // Helper function to determine granularity based on date range
