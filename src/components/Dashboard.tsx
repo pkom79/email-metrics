@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Upload, BarChart3, TrendingUp, TrendingDown, Calendar, Zap, Users, Mail, Target, DollarSign, Eye, MousePointer, ShoppingCart, UserX, AlertTriangle, Bounce, CheckCircle, ArrowUp, ArrowDown, MessageSquare, Clock, Shield, Lightbulb, Star, Brain, Sparkles, ChevronRight, Award, Activity } from 'lucide-react';
+import { Upload, BarChart3, TrendingUp, TrendingDown, Calendar, Zap, Users, Mail, Target, DollarSign, Eye, MousePointer, ShoppingCart, UserX, AlertTriangle, Fence as Bounce, CheckCircle, ArrowUp, ArrowDown, MessageSquare, Clock, Shield, Lightbulb, Star, Brain, Sparkles, ChevronRight, Award, Activity } from 'lucide-react';
 import MetricCard from './MetricCard';
 import AudienceCharts from './AudienceCharts';
 import DayOfWeekPerformance from './DayOfWeekPerformance';
