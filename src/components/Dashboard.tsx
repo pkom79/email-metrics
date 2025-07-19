@@ -4,7 +4,7 @@ import MetricCard from './MetricCard';
 import AudienceCharts from './AudienceCharts';
 import DayOfWeekPerformance from './DayOfWeekPerformance';
 import HourOfDayPerformance from './HourOfDayPerformance';
-import InsightsModal from './InsightsModal';
+import AICampaignIntelligence from './AICampaignIntelligence';
 import { 
   ALL_CAMPAIGNS, 
   ALL_FLOW_EMAILS, 
@@ -127,7 +127,6 @@ interface InsightsData {
 
 const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   const [dateRange, setDateRange] = useState('30d');
-  const [showInsightsModal, setShowInsightsModal] = useState(false);
   const [insights, setInsights] = useState<InsightsData | null>(null);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
 
@@ -275,7 +274,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
 
   const handleGetInsights = async () => {
     setIsLoadingInsights(true);
-    setShowInsightsModal(true);
     
     try {
       // Prepare data for AI analysis
@@ -344,78 +342,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
     return new Intl.NumberFormat('en-US').format(value);
   };
 
-  // Get health color
-  const getHealthColor = (health: string) => {
-    switch (health) {
-      case 'excellent':
-        return 'text-green-600 dark:text-green-400';
-      case 'good':
-        return 'text-blue-600 dark:text-blue-400';
-      case 'stable':
-        return 'text-yellow-600 dark:text-yellow-400';
-      case 'needs_attention':
-        return 'text-red-600 dark:text-red-400';
-      default:
-        return 'text-gray-600 dark:text-gray-400';
-    }
-  };
-
-  // Get priority color
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
-      case 'medium':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
-      case 'low':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
-    }
-  };
-
-  // Health Gauge Component
-  const HealthGauge = ({ score }: { score: number }) => {
-    const getScoreColor = (score: number) => {
-      if (score >= 80) return '#10b981';
-      if (score >= 60) return '#f59e0b';
-      if (score >= 40) return '#f97316';
-      return '#ef4444';
-    };
-
-    const circumference = 2 * Math.PI * 45;
-    const strokeDasharray = `${(score / 100) * circumference} ${circumference}`;
-
-    return (
-      <div className="relative w-20 h-20">
-        <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 100 100">
-          <circle
-            cx="50"
-            cy="50"
-            r="45"
-            stroke={isDarkMode ? '#374151' : '#e5e7eb'}
-            strokeWidth="6"
-            fill="none"
-          />
-          <circle
-            cx="50"
-            cy="50"
-            r="45"
-            stroke={getScoreColor(score)}
-            strokeWidth="6"
-            fill="none"
-            strokeDasharray={strokeDasharray}
-            strokeLinecap="round"
-            className="transition-all duration-1000 ease-out"
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-lg font-bold">{score}</span>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
       <div className="max-w-7xl mx-auto p-6">
@@ -449,31 +375,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
               <option value="365d">Last year</option>
               <option value="all">All time</option>
             </select>
-            <button
-              onClick={handleGetInsights}
-              disabled={isLoadingInsights}
-              className={`
-                group relative px-6 py-2 rounded-lg text-sm font-semibold transition-all duration-200 transform
-                ${isLoadingInsights
-                  ? `${isDarkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-400'} cursor-not-allowed`
-                  : 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-lg hover:shadow-xl hover:scale-105'
-                }
-              `}
-            >
-              <span className="flex items-center gap-2">
-                {isLoadingInsights ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Brain className="w-4 h-4" />
-                    Get AI Insights
-                  </>
-                )}
-              </span>
-            </button>
             <button
               onClick={onUploadNew}
               className={`
@@ -633,304 +534,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
           />
         </div>
 
-        {/* AI Insights Section */}
-        {insights && (
-          <div className="mb-8">
-            <div className={`
-              relative overflow-hidden rounded-2xl border-2 border-gradient-to-r from-purple-500/20 to-blue-500/20
-              ${isDarkMode ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-purple-900/10' : 'bg-gradient-to-br from-white via-purple-50/30 to-blue-50/30'}
-            `}>
-              {/* Header with animated background */}
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-purple-600/10 via-blue-600/10 to-purple-600/10 animate-pulse" />
-                <div className="relative p-8 border-b border-purple-500/20">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-blue-500 rounded-2xl blur-lg opacity-30 animate-pulse" />
-                        <div className="relative p-4 bg-gradient-to-r from-purple-600 to-blue-600 rounded-2xl">
-                          <Brain className="w-8 h-8 text-white" />
-                        </div>
-                      </div>
-                      <div>
-                        <h2 className={`text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent`}>
-                          AI Campaign Intelligence
-                        </h2>
-                        <p className={`text-lg ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                          Advanced analytics powered by artificial intelligence
-                        </p>
-                      </div>
-                    </div>
-                    {insights.health_monitoring && (
-                      <div className="flex items-center gap-4">
-                        <HealthGauge score={insights.health_monitoring.health_score} />
-                        <div className="text-right">
-                          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Account Health</p>
-                          <p className={`text-2xl font-bold capitalize ${getHealthColor(insights.summary.overall_health)}`}>
-                            {insights.summary.overall_health.replace('_', ' ')}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Key Metrics Overview */}
-              <div className="p-8 border-b border-purple-500/10">
-                <h3 className={`text-xl font-semibold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                  Performance Overview
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  {Object.entries(insights.summary.key_metrics).map(([key, value]) => (
-                    <div key={key} className={`
-                      p-4 rounded-lg border
-                      ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white/50 border-gray-200/50'}
-                      backdrop-blur-sm
-                    `}>
-                      <p className={`text-xs uppercase tracking-wide mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {key.replace('_', ' ')}
-                      </p>
-                      <p className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                        {value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* AI Analysis Modules */}
-              <div className="p-8 space-y-8">
-                {/* Subject Line Intelligence */}
-                {insights.subject_line_intelligence && (
-                  <div>
-                    <div className="flex items-center gap-3 mb-6">
-                      <MessageSquare className="w-6 h-6 text-purple-600" />
-                      <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                        Subject Line Intelligence Engine
-                      </h3>
-                    </div>
-                    <div className="grid lg:grid-cols-2 gap-6">
-                      {/* High-Impact Patterns */}
-                      <div className={`
-                        p-6 rounded-xl border
-                        ${isDarkMode ? 'bg-gray-800/30 border-gray-700/30' : 'bg-white/60 border-gray-200/60'}
-                        backdrop-blur-sm
-                      `}>
-                        <h4 className="font-semibold mb-4 text-purple-600 dark:text-purple-400 flex items-center gap-2">
-                          <Sparkles className="w-5 h-5" />
-                          High-Impact Patterns
-                        </h4>
-                        <div className="space-y-4">
-                          {insights.subject_line_intelligence.key_patterns.map((pattern, index) => (
-                            <div key={index} className={`
-                              p-4 rounded-lg border
-                              ${isDarkMode ? 'bg-green-900/20 border-green-800/30' : 'bg-green-50/80 border-green-200/60'}
-                            `}>
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-medium text-green-600 dark:text-green-400">
-                                  {pattern.pattern}
-                                </span>
-                                <span className="text-sm font-bold text-green-600 dark:text-green-400 flex items-center gap-1">
-                                  <TrendingUp className="w-4 h-4" />
-                                  +{pattern.performance_increase}%
-                                </span>
-                              </div>
-                              <p className="text-sm text-green-600 dark:text-green-400 mb-2">
-                                {pattern.impact}
-                              </p>
-                              <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                                💡 Example: "{pattern.example}"
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Optimization Guidelines */}
-                      <div className={`
-                        p-6 rounded-xl border
-                        ${isDarkMode ? 'bg-gray-800/30 border-gray-700/30' : 'bg-white/60 border-gray-200/60'}
-                        backdrop-blur-sm
-                      `}>
-                        <h4 className="font-semibold mb-4 text-purple-600 dark:text-purple-400 flex items-center gap-2">
-                          <Target className="w-5 h-5" />
-                          Optimization Guidelines
-                        </h4>
-                        <div className="space-y-4">
-                          <div>
-                            <h5 className="text-sm font-medium text-green-600 dark:text-green-400 mb-3 flex items-center gap-2">
-                              <CheckCircle className="w-4 h-4" />
-                              Use These Elements
-                            </h5>
-                            <div className="space-y-2">
-                              {insights.subject_line_intelligence.winning_elements.map((element, idx) => (
-                                <div key={idx} className="text-sm flex items-center gap-2">
-                                  <ChevronRight className="w-3 h-3 text-green-500" />
-                                  {element}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <h5 className="text-sm font-medium text-red-600 dark:text-red-400 mb-3 flex items-center gap-2">
-                              <AlertTriangle className="w-4 h-4" />
-                              Avoid These Elements
-                            </h5>
-                            <div className="space-y-2">
-                              {insights.subject_line_intelligence.avoid_elements.map((element, idx) => (
-                                <div key={idx} className="text-sm flex items-center gap-2">
-                                  <ChevronRight className="w-3 h-3 text-red-500" />
-                                  {element}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <div className={`
-                            p-3 rounded-lg
-                            ${isDarkMode ? 'bg-blue-900/20 border border-blue-800/30' : 'bg-blue-50/80 border border-blue-200/60'}
-                          `}>
-                            <span className="text-sm font-medium text-blue-600 dark:text-blue-400 flex items-center gap-2">
-                              <Eye className="w-4 h-4" />
-                              Optimal Length: {insights.subject_line_intelligence.optimal_length}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Temporal Performance */}
-                {insights.temporal_performance && (
-                  <div>
-                    <div className="flex items-center gap-3 mb-6">
-                      <Clock className="w-6 h-6 text-purple-600" />
-                      <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                        Temporal Performance Mapping
-                      </h3>
-                    </div>
-                    <div className="grid lg:grid-cols-2 gap-6">
-                      <div className={`
-                        p-6 rounded-xl border
-                        ${isDarkMode ? 'bg-gray-800/30 border-gray-700/30' : 'bg-white/60 border-gray-200/60'}
-                        backdrop-blur-sm
-                      `}>
-                        <h4 className="font-semibold mb-4 text-purple-600 dark:text-purple-400 flex items-center gap-2">
-                          <Activity className="w-5 h-5" />
-                          Peak Performance Times
-                        </h4>
-                        <div className="space-y-3">
-                          {insights.temporal_performance.best_times.map((time, index) => (
-                            <div key={index} className={`
-                              p-4 rounded-lg
-                              ${isDarkMode ? 'bg-green-900/20 border border-green-800/30' : 'bg-green-50/80 border border-green-200/60'}
-                            `}>
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-medium text-green-600 dark:text-green-400">
-                                  {time.time_period}
-                                </span>
-                                <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                                  {time.performance_metric}
-                                </span>
-                              </div>
-                              <p className="text-sm text-green-600 dark:text-green-400 mb-2">
-                                {time.opportunity}
-                              </p>
-                              <p className="text-xs font-medium text-green-700 dark:text-green-300 flex items-center gap-1">
-                                <DollarSign className="w-3 h-3" />
-                                {time.revenue_impact}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div className={`
-                        p-6 rounded-xl border
-                        ${isDarkMode ? 'bg-gray-800/30 border-gray-700/30' : 'bg-white/60 border-gray-200/60'}
-                        backdrop-blur-sm
-                      `}>
-                        <h4 className="font-semibold mb-4 text-purple-600 dark:text-purple-400 flex items-center gap-2">
-                          <Calendar className="w-5 h-5" />
-                          Seasonal Insights
-                        </h4>
-                        <div className={`
-                          p-4 rounded-lg
-                          ${isDarkMode ? 'bg-yellow-900/20 border border-yellow-800/30' : 'bg-yellow-50/80 border border-yellow-200/60'}
-                        `}>
-                          <div className="space-y-3">
-                            {insights.temporal_performance.seasonal_patterns.map((pattern, idx) => (
-                              <div key={idx} className="text-sm flex items-start gap-2">
-                                <ChevronRight className="w-3 h-3 text-yellow-500 mt-0.5 flex-shrink-0" />
-                                {pattern}
-                              </div>
-                            ))}
-                          </div>
-                          <div className="mt-4 pt-3 border-t border-yellow-300/30 dark:border-yellow-700/30">
-                            <p className="text-sm font-medium text-yellow-600 dark:text-yellow-400 flex items-center gap-2">
-                              <Lightbulb className="w-4 h-4" />
-                              {insights.temporal_performance.optimization_schedule}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Priority Recommendations */}
-                <div>
-                  <div className="flex items-center gap-3 mb-6">
-                    <Award className="w-6 h-6 text-purple-600" />
-                    <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                      Priority Action Items
-                    </h3>
-                  </div>
-                  <div className="grid lg:grid-cols-2 gap-4">
-                    {insights.recommendations.slice(0, 6).map((rec, index) => (
-                      <div key={index} className={`
-                        p-6 rounded-xl border transition-all duration-200 hover:shadow-lg
-                        ${isDarkMode ? 'bg-gray-800/30 border-gray-700/30 hover:bg-gray-800/50' : 'bg-white/60 border-gray-200/60 hover:bg-white/80'}
-                        backdrop-blur-sm
-                      `}>
-                        <div className="flex items-start gap-4">
-                          <span className={`px-3 py-1 text-xs font-medium rounded-full ${getPriorityColor(rec.priority)}`}>
-                            {rec.priority} priority
-                          </span>
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-purple-600 dark:text-purple-400 mb-2">
-                              {rec.category}
-                            </h4>
-                            <p className={`font-medium mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                              {rec.action}
-                            </p>
-                            <p className={`text-sm mb-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                              {rec.reason}
-                            </p>
-                            <p className="text-sm font-medium text-green-600 dark:text-green-400 flex items-center gap-2">
-                              <Star className="w-4 h-4" />
-                              {rec.impact}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* AI Campaign Intelligence Section */}
+        <AICampaignIntelligence
+          insights={insights}
+          isLoading={isLoadingInsights}
+          onGetInsights={handleGetInsights}
+          isDarkMode={isDarkMode}
+          currentPeriodMetrics={currentPeriodMetrics}
+          previousPeriodMetrics={previousPeriodMetrics}
+          audienceInsights={audienceInsights}
+        />
       </div>
-
-      {/* Insights Modal */}
-      <InsightsModal
-        isOpen={showInsightsModal}
-        onClose={() => setShowInsightsModal(false)}
-        insights={insights}
-        isDarkMode={isDarkMode}
-        isLoading={isLoadingInsights}
-      />
     </div>
   );
 };
