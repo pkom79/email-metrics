@@ -130,6 +130,81 @@ export class AIInsightsController {
     };
   }
 
+  async generateInsightsWithProgress(context?: {
+    storeName?: string;
+    productDescription?: string;
+    priceRange?: string;
+    slowMonths?: string[];
+  }, jobId?: string): Promise<AIInsightsReport> {
+    console.log('Starting AI Insights generation with progress tracking...');
+    
+    // Use provided jobId or generate one
+    const analysisJobId = jobId || `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    try {
+      // Call the real Supabase edge function
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error('Supabase environment variables not configured');
+      }
+      
+      // Prepare the payload
+      const payload = {
+        campaigns: this.campaigns,
+        flows: this.flows,
+        subscribers: this.subscribers,
+        context,
+        jobId: analysisJobId
+      };
+      
+      console.log('Calling Supabase edge function for AI insights processing...');
+      
+      // Start the real processing via Supabase edge function
+      const response = await fetch(`${supabaseUrl}/functions/v1/process-email-insights`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API call failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Edge function response:', result);
+      
+      // For now, return a mock report structure
+      // In a real implementation, you would wait for the job completion
+      // and retrieve the final report from the database
+      return {
+        executiveSummary: {
+          totalRevenue: '$0',
+          dateRange: '90 days',
+          keyFindings: ['Analysis in progress...'],
+          metrics: [
+            { value: '0', label: 'Insights Generated' },
+            { value: '0%', label: 'Estimated Impact' }
+          ]
+        },
+        categories: [], // Will be populated when analysis completes
+        topPriorities: [
+          {
+            title: 'Analysis in Progress',
+            impact: 'Please wait for completion'
+          }
+        ]
+      };
+    } catch (error) {
+      console.error('Error starting AI insights processing:', error);
+      throw error;
+    }
+  }
+
   private async processAllInsights(): Promise<InsightResult[]> {
     const results: InsightResult[] = [];
     

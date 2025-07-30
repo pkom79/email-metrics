@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, Upload, AlertCircle, ChevronDown, Brain, ChevronRight, BarChart3, Zap, Send, Mail, Star } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 import MetricCard from './MetricCard';
 import AIReportTemplate from './AIReportTemplate';
+import AnalysisProgress from './AnalysisProgress';
 import 'tailwindcss/tailwind.css';
 import AudienceCharts from './AudienceCharts';
 import InsightsModal from './InsightsModal';
@@ -13,6 +15,11 @@ import { ProcessedCampaign, ProcessedFlowEmail } from '../utils/dataTypes';
 import CustomSegmentBlock from './CustomSegmentBlock';
 import { AIInsightsController } from '../utils/aiInsights/aiInsightsController';
 import { AIInsightsReport } from '../utils/aiInsights/types';
+
+// Create Supabase client
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface DashboardProps {
   onUploadNew: () => void;
@@ -32,6 +39,57 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   const [aiAnalysisStarted, setAiAnalysisStarted] = useState(false);
   const [aiReport, setAiReport] = useState<AIInsightsReport | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [analysisJobId, setAnalysisJobId] = useState<string | null>(null);
+  
+  // Progress tracking state
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisStage, setAnalysisStage] = useState('');
+  const [analysisETA, setAnalysisETA] = useState('');
+  const [showProgress, setShowProgress] = useState(false);
+  const [progressError, setProgressError] = useState<string | null>(null);
+  
+  // Context modal state
+  const [showContextModal, setShowContextModal] = useState(false);
+  const [storeName, setStoreName] = useState('');
+  const [productDescription, setProductDescription] = useState('');
+  const [priceRange, setPriceRange] = useState('');
+  const [slowMonths, setSlowMonths] = useState<string[]>([]);
+  const [contextFormComplete, setContextFormComplete] = useState(false);
+
+  // Debug modal state changes
+  React.useEffect(() => {
+    console.log('Modal state changed:', showContextModal);
+  }, [showContextModal]);
+
+  // Context form validation
+  React.useEffect(() => {
+    const isComplete = storeName.trim() !== '' && 
+                     productDescription.trim() !== '' && 
+                     priceRange !== '';
+    setContextFormComplete(isComplete);
+  }, [storeName, productDescription, priceRange]);
+
+  // Handle month selection for multi-select
+  const handleMonthToggle = (month: string) => {
+    setSlowMonths(prev => {
+      if (prev.includes(month)) {
+        return prev.filter(m => m !== month);
+      } else {
+        return [...prev, month];
+      }
+    });
+  };
+
+  // Handle context form submission
+  const handleContextSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (contextFormComplete) {
+      setShowContextModal(false);
+      setShowAIAnalysis(true);
+      setAiAnalysisStarted(true);
+      generateAIInsights();
+    }
+  };
 
   // Get data from DataManager
   const dataManager = DataManager.getInstance();
@@ -59,6 +117,56 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
     }
     return new Date();
   }, [hasData]);
+
+  // Real-time progress tracking subscription
+  useEffect(() => {
+    if (!analysisJobId || !showProgress) return;
+    
+    console.log('Setting up progress tracking for job:', analysisJobId);
+    
+    const channel = supabase
+      .channel(`analysis-${analysisJobId}`)
+      .on('broadcast', { event: 'progress' }, (payload) => {
+        console.log('Progress update received:', payload);
+        const { progress, stage, eta, error } = payload.payload;
+        
+        setAnalysisProgress(progress || 0);
+        setAnalysisStage(stage || '');
+        setAnalysisETA(eta || '');
+        
+        if (error) {
+          setProgressError(error);
+          setShowProgress(false);
+          setIsGeneratingReport(false);
+        }
+        
+        if (progress === 100) {
+          console.log('Analysis completed, hiding progress');
+          setTimeout(() => {
+            setShowProgress(false);
+            setIsGeneratingReport(false);
+          }, 1000);
+        }
+      })
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+      });
+    
+    // Timeout after 5 minutes
+    const timeout = setTimeout(() => {
+      console.log('Analysis timeout after 5 minutes');
+      setProgressError('Analysis timed out. Please try again.');
+      setShowProgress(false);
+      setIsGeneratingReport(false);
+      supabase.removeChannel(channel);
+    }, 5 * 60 * 1000);
+    
+    return () => {
+      console.log('Cleaning up progress subscription');
+      clearTimeout(timeout);
+      supabase.removeChannel(channel);
+    };
+  }, [analysisJobId, showProgress]);
 
   const dateRangeOptions = [
     { value: '30d', label: 'Last 30 days' },
@@ -564,7 +672,19 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   // Add this function inside the Dashboard component
   const generateAIInsights = async () => {
     try {
+      // Generate unique job ID
+      const jobId = crypto.randomUUID();
+      setAnalysisJobId(jobId);
+      
+      // Start progress tracking
+      setShowProgress(true);
       setIsGeneratingReport(true);
+      setProgressError(null);
+      setAnalysisProgress(0);
+      setAnalysisStage('Initializing analysis...');
+      setAnalysisETA('Estimating time...');
+      
+      console.log('Starting AI analysis with job ID:', jobId);
       
       // Get data from DataManager
       const dataManager = DataManager.getInstance();
@@ -572,15 +692,29 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
       const flows = dataManager.getFlowEmails();
       const subscribers = dataManager.getSubscribers();
       
-      // Create controller and generate insights
-      const controller = new AIInsightsController(campaigns, flows, subscribers);
-      const report = await controller.generateInsights();
+      // Prepare context from form
+      const context = {
+        storeName,
+        productDescription,
+        priceRange,
+        slowMonths
+      };
       
+      // Create controller and generate insights with progress tracking
+      const controller = new AIInsightsController(campaigns, flows, subscribers);
+      const report = await controller.generateInsightsWithProgress(context, jobId);
+      
+      // Set the final report
       setAiReport(report);
+      setShowAIAnalysis(true);
+      setAiAnalysisStarted(true);
+      
+      console.log('AI analysis completed successfully');
+      
     } catch (error) {
       console.error('Error generating AI insights:', error);
-      // You might want to show an error message to the user here
-    } finally {
+      setProgressError(error instanceof Error ? error.message : 'An error occurred during analysis');
+      setShowProgress(false);
       setIsGeneratingReport(false);
     }
   };
@@ -950,11 +1084,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
                 {/* CTA Button */}
                 <div className="flex justify-center">
                   <button
-                    onClick={() => {
-                      setShowAIAnalysis(true);
-                      setAiAnalysisStarted(true);
-                      generateAIInsights(); // Add this line
-                    }}
+                    onClick={() => setShowContextModal(true)}
                     className="group relative px-8 py-4 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
                   >
                     <div className="flex items-center gap-3">
@@ -970,11 +1100,35 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
 
             {/* AI Analysis Report Section */}
             {aiAnalysisStarted && (
-                <AIReportTemplate 
-                  isDarkMode={isDarkMode} 
-                  report={aiReport || undefined}
-                  isLoading={isGeneratingReport}
-                />
+              <div>
+                {analysisJobId && isGeneratingReport && (
+                  <AnalysisProgress
+                    jobId={analysisJobId}
+                    onComplete={() => {
+                      // Analysis complete - the report should be fetched separately
+                      setIsGeneratingReport(false);
+                    }}
+                    onCancel={() => {
+                      setAiAnalysisStarted(false);
+                      setAnalysisJobId(null);
+                      setIsGeneratingReport(false);
+                    }}
+                    onError={(error: string) => {
+                      console.error('Analysis error:', error);
+                      setIsGeneratingReport(false);
+                    }}
+                    supabase={supabase}
+                    isDarkMode={isDarkMode}
+                  />
+                )}
+                {!isGeneratingReport && aiReport && (
+                  <AIReportTemplate 
+                    isDarkMode={isDarkMode} 
+                    report={aiReport}
+                    isLoading={false}
+                  />
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -990,6 +1144,215 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
         isDarkMode={isDarkMode}
         isLoading={isGeneratingInsights}
       />
+
+      {/* Context Collection Modal */}
+      {showContextModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            console.log('Backdrop clicked'); // Debug log
+            setShowContextModal(false);
+          }}
+        >
+          <div 
+            className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => {
+              console.log('Modal content clicked'); // Debug log
+              e.stopPropagation();
+            }}
+          >
+            <div className="p-8">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    Tell us about your business
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    This helps our AI provide more accurate and personalized insights
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowContextModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <form onSubmit={handleContextSubmit} className="space-y-6">
+                {/* Store Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Store Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={storeName}
+                    onChange={(e) => setStoreName(e.target.value)}
+                    placeholder="e.g., Acme Yoga, Fresh Baby Co."
+                    maxLength={100}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Your brand or store name
+                  </p>
+                </div>
+
+                {/* What You Sell */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    What do you sell? *
+                  </label>
+                  <input
+                    type="text"
+                    value={productDescription}
+                    onChange={(e) => setProductDescription(e.target.value)}
+                    placeholder="Be specific (e.g., 'luxury yoga apparel for women', 'organic baby clothes')"
+                    maxLength={200}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    The more specific, the better insights you'll get
+                  </p>
+                </div>
+
+                {/* Price Range */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Price Range *
+                  </label>
+                  <select
+                    value={priceRange}
+                    onChange={(e) => setPriceRange(e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
+                    required
+                  >
+                    <option value="">Select price range</option>
+                    <option value="Budget (mostly under $25)">Budget (mostly under $25)</option>
+                    <option value="Economy ($25-$50)">Economy ($25-$50)</option>
+                    <option value="Mid-range ($50-$100)">Mid-range ($50-$100)</option>
+                    <option value="Premium ($100-$200)">Premium ($100-$200)</option>
+                    <option value="Luxury ($200-$500)">Luxury ($200-$500)</option>
+                    <option value="Ultra-luxury ($500+)">Ultra-luxury ($500+)</option>
+                    <option value="Mixed range">Mixed range</option>
+                  </select>
+                </div>
+
+                {/* Slow Sales Periods */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Slow Sales Periods *
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    Select all that apply
+                  </p>
+                  <div className="grid grid-cols-3 gap-3 md:grid-cols-3 sm:grid-cols-2">
+                    {[
+                      'January', 'February', 'March', 'April',
+                      'May', 'June', 'July', 'August',
+                      'September', 'October', 'November', 'December'
+                    ].map((month) => (
+                      <label
+                        key={month}
+                        className={`inline-flex items-center space-x-2 cursor-pointer p-3 rounded-lg border transition-all ${
+                          slowMonths.includes(month)
+                            ? 'bg-purple-100 dark:bg-purple-900 border-purple-500 text-purple-900 dark:text-purple-100'
+                            : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={slowMonths.includes(month)}
+                          onChange={() => handleMonthToggle(month)}
+                          className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 dark:focus:ring-purple-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                        />
+                        <span className="text-sm font-medium">{month}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-6">
+                  <button
+                    type="button"
+                    onClick={() => setShowContextModal(false)}
+                    className="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!contextFormComplete}
+                    className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-all font-medium shadow-sm"
+                  >
+                    Start Analysis
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Progress Modal Overlay */}
+      {showProgress && analysisJobId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          
+          {/* Progress Modal */}
+          <div className="relative z-10 w-full max-w-md mx-4">
+            <AnalysisProgress
+              jobId={analysisJobId}
+              onComplete={() => {
+                console.log('Analysis completed callback');
+                setShowProgress(false);
+              }}
+              onCancel={() => {
+                console.log('Analysis cancelled by user');
+                setShowProgress(false);
+                setIsGeneratingReport(false);
+                setAnalysisJobId(null);
+              }}
+              onError={(error) => {
+                console.error('Analysis error:', error);
+                setProgressError(error);
+                setShowProgress(false);
+                setIsGeneratingReport(false);
+              }}
+              supabase={supabase}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Progress Error Display */}
+      {progressError && (
+        <div className="fixed top-4 right-4 z-50 max-w-sm">
+          <div className={`p-4 rounded-lg border ${isDarkMode 
+            ? 'bg-red-900/20 border-red-700 text-red-300' 
+            : 'bg-red-50 border-red-200 text-red-700'
+          }`}>
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="font-medium mb-1">Analysis Failed</h4>
+                <p className="text-sm">{progressError}</p>
+                <button
+                  onClick={() => setProgressError(null)}
+                  className="text-sm underline mt-2 hover:no-underline"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
