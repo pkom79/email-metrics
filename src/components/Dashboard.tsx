@@ -11,6 +11,8 @@ import FlowStepAnalysis from './FlowStepAnalysis';
 import { DataManager } from '../utils/dataManager';
 import { ProcessedCampaign, ProcessedFlowEmail } from '../utils/dataTypes';
 import CustomSegmentBlock from './CustomSegmentBlock';
+import { AIInsightsController } from '../utils/aiInsights/aiInsightsController';
+import { AIInsightsReport } from '../utils/aiInsights/types';
 
 interface DashboardProps {
   onUploadNew: () => void;
@@ -18,8 +20,6 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
-  // const [aiReport, setAIReport] = useState<string | null>(null);
-  const [loadingAI, setLoadingAI] = useState(false);
   const [dateRange, setDateRange] = useState('30d');
   const [selectedFlow, setSelectedFlow] = useState('all');
   const [selectedCampaignMetric, setSelectedCampaignMetric] = useState('revenue');
@@ -30,6 +30,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
   const [showAIAnalysis, setShowAIAnalysis] = useState(false);
   const [aiAnalysisStarted, setAiAnalysisStarted] = useState(false);
+  const [aiReport, setAiReport] = useState<AIInsightsReport | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   // Get data from DataManager
   const dataManager = DataManager.getInstance();
@@ -559,6 +561,30 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
     }
   };
 
+  // Add this function inside the Dashboard component
+  const generateAIInsights = async () => {
+    try {
+      setIsGeneratingReport(true);
+      
+      // Get data from DataManager
+      const dataManager = DataManager.getInstance();
+      const campaigns = dataManager.getCampaigns();
+      const flows = dataManager.getFlowEmails();
+      const subscribers = dataManager.getSubscribers();
+      
+      // Create controller and generate insights
+      const controller = new AIInsightsController(campaigns, flows, subscribers);
+      const report = await controller.generateInsights();
+      
+      setAiReport(report);
+    } catch (error) {
+      console.error('Error generating AI insights:', error);
+      // You might want to show an error message to the user here
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
   // If no data is loaded, show a message
   if (!hasData) {
     return (
@@ -927,7 +953,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
                     onClick={() => {
                       setShowAIAnalysis(true);
                       setAiAnalysisStarted(true);
-                      setLoadingAI(false);
+                      generateAIInsights(); // Add this line
                     }}
                     className="group relative px-8 py-4 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
                   >
@@ -944,7 +970,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
 
             {/* AI Analysis Report Section */}
             {aiAnalysisStarted && (
-                <AIReportTemplate isDarkMode={isDarkMode} />
+                <AIReportTemplate 
+                  isDarkMode={isDarkMode} 
+                  report={aiReport || undefined}
+                  isLoading={isGeneratingReport}
+                />
             )}
           </div>
         </div>
