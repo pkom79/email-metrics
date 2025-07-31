@@ -711,6 +711,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
       
       console.log('AI analysis completed successfully');
       
+      // Hide progress dialog and stop loading state
+      setShowProgress(false);
+      setIsGeneratingReport(false);
+      
     } catch (error) {
       console.error('Error generating AI insights:', error);
       setProgressError(error instanceof Error ? error.message : 'An error occurred during analysis');
@@ -1125,6 +1129,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
                   <AIReportTemplate 
                     isDarkMode={isDarkMode} 
                     report={aiReport}
+                    enhancedAnalysis={aiReport.enhancedAnalysis}
                     isLoading={false}
                   />
                 )}

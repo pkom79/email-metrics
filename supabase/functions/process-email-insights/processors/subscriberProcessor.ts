@@ -73,9 +73,9 @@ export class SubscriberProcessor {
       group.revenueShare = ((group.revenueContribution / totalRevenue) * 100)
     })
 
-    const mostValuable = lifecycleStats.reduce((best, current) => 
+    const mostValuable = lifecycleStats.length > 0 ? lifecycleStats.reduce((best, current) => 
       current.avgRevenue > best.avgRevenue ? current : best
-    )
+    ) : { ageGroup: 'None', count: 0, avgRevenue: 0, avgOrders: 0, avgAOV: 0, revenueContribution: 0, revenueShare: 0 }
 
     return {
       insightId: "subscriber-lifecycle",

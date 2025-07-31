@@ -192,13 +192,13 @@ export class FlowProcessor {
       totalRevenue: day.emails.reduce((sum, e) => sum + e.revenue, 0)
     })).filter(day => day.emailCount > 0)
 
-    const bestDay = dayStats.reduce((best, current) => 
+    const bestDay = dayStats.length > 0 ? dayStats.reduce((best, current) => 
       current.avgRevenuePerEmail > best.avgRevenuePerEmail ? current : best
-    )
+    ) : { dayName: 'None', emailCount: 0, avgOpenRate: 0, avgClickRate: 0, avgRevenuePerEmail: 0, totalRevenue: 0 }
 
-    const worstDay = dayStats.reduce((worst, current) => 
+    const worstDay = dayStats.length > 0 ? dayStats.reduce((worst, current) => 
       current.avgRevenuePerEmail < worst.avgRevenuePerEmail ? current : worst
-    )
+    ) : { dayName: 'None', emailCount: 0, avgOpenRate: 0, avgClickRate: 0, avgRevenuePerEmail: 0, totalRevenue: 0 }
 
     return {
       insightId: "day-of-week-flow-performance",

@@ -120,12 +120,12 @@ export class RevenueProcessor {
         trendAnalysis,
         currentEfficiency: currentEfficiency.toFixed(4),
         historicalAverage: historicalAvg.toFixed(4),
-        bestMonth: monthlyEfficiency.reduce((best, current) => 
+        bestMonth: monthlyEfficiency.length > 0 ? monthlyEfficiency.reduce((best, current) => 
           current.revenuePerEmail > best.revenuePerEmail ? current : best
-        ),
-        worstMonth: monthlyEfficiency.reduce((worst, current) => 
+        ) : { month: 'None', revenuePerEmail: 0, totalRevenue: 0, emailsSent: 0 },
+        worstMonth: monthlyEfficiency.length > 0 ? monthlyEfficiency.reduce((worst, current) => 
           current.revenuePerEmail < worst.revenuePerEmail ? current : worst
-        )
+        ) : { month: 'None', revenuePerEmail: 0, totalRevenue: 0, emailsSent: 0 }
       },
       significance: Math.abs(efficiencyTrend),
       confidence: monthlyEfficiency.length > 3 ? 0.8 : 0.6,
@@ -150,13 +150,13 @@ export class RevenueProcessor {
       emailCount: day.emailCount
     }))
 
-    const mostReliable = reliabilityScores.reduce((best, current) => 
+    const mostReliable = reliabilityScores.length > 0 ? reliabilityScores.reduce((best, current) => 
       current.reliabilityScore > best.reliabilityScore ? current : best
-    )
+    ) : { day: 'None', avgRevenue: 0, consistency: 0, reliabilityScore: 0, emailCount: 0 }
 
-    const leastReliable = reliabilityScores.reduce((worst, current) => 
+    const leastReliable = reliabilityScores.length > 0 ? reliabilityScores.reduce((worst, current) => 
       current.reliabilityScore < worst.reliabilityScore ? current : worst
-    )
+    ) : { day: 'None', avgRevenue: 0, consistency: 0, reliabilityScore: 0, emailCount: 0 }
 
     return {
       insightId: "day-of-week-reliability",
@@ -192,9 +192,9 @@ export class RevenueProcessor {
       data: {
         clusters: clusterAnalysis,
         totalClusters: clusterAnalysis.length,
-        bestCluster: clusterAnalysis.reduce((best, current) => 
+        bestCluster: clusterAnalysis.length > 0 ? clusterAnalysis.reduce((best, current) => 
           current.avgRevenue > best.avgRevenue ? current : best
-        ),
+        ) : { timeCluster: 'None', avgRevenue: 0, emailCount: 0, consistency: 0 },
         consistentClusters: clusterAnalysis.filter(c => c.consistency > 0.7),
         totalEmailsAnalyzed: allEmails.length
       },
@@ -213,9 +213,9 @@ export class RevenueProcessor {
     const sizeBuckets = this.createSizeBuckets(this.campaigns)
     const performanceBySize = this.analyzePerformanceBySize(sizeBuckets)
     
-    const optimalSize = performanceBySize.reduce((best, current) => 
+    const optimalSize = performanceBySize.length > 0 ? performanceBySize.reduce((best, current) => 
       current.revenuePerEmail > best.revenuePerEmail ? current : best
-    )
+    ) : { sizeRange: 'None', revenuePerEmail: 0, campaignCount: 0, avgOpenRate: 0, avgClickRate: 0 }
 
     const sizeEfficiencyTrend = this.calculateSizeEfficiencyTrend(performanceBySize)
 

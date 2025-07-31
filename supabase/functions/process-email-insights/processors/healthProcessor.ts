@@ -131,9 +131,9 @@ export class HealthProcessor {
       allEmails.map(e => e.spamRate)
     )
 
-    const highestSpamBucket = bucketStats.reduce((highest, current) => 
+    const highestSpamBucket = bucketStats.length > 0 ? bucketStats.reduce((highest, current) => 
       current.avgSpamRate > highest.avgSpamRate ? current : highest
-    )
+    ) : { bucket: 'None', count: 0, avgSpamRate: 0 }
 
     return {
       insightId: "spam-by-size",

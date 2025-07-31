@@ -3,6 +3,12 @@ import { InsightResult, AIInsightsReport, TopPriority } from './types';
 import { formatCurrency, formatPercent } from './calculationHelpers';
 import { getDateRange, detectSeasonalEvents } from './dateUtils';
 import { AITextGenerator } from './aiTextGenerator';
+import { createClient } from '@supabase/supabase-js';
+
+// Create Supabase client
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Import all processors
 import { 
@@ -142,62 +148,152 @@ export class AIInsightsController {
     const analysisJobId = jobId || `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     try {
-      // Call the real Supabase edge function
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      // Limit data size to prevent function crashes
+      const maxCampaigns = 100; // Limit to last 100 campaigns
+      const maxFlows = 50; // Limit to last 50 flows  
+      const maxSubscribers = 1000; // Limit to last 1000 subscribers
       
-      if (!supabaseUrl || !supabaseKey) {
-        throw new Error('Supabase environment variables not configured');
-      }
+      const limitedCampaigns = this.campaigns.slice(-maxCampaigns);
+      const limitedFlows = this.flows.slice(-maxFlows);
+      const limitedSubscribers = this.subscribers.slice(-maxSubscribers);
       
-      // Prepare the payload
+      // Prepare the payload with size limits
       const payload = {
-        campaigns: this.campaigns,
-        flows: this.flows,
-        subscribers: this.subscribers,
+        campaigns: limitedCampaigns,
+        flows: limitedFlows,
+        subscribers: limitedSubscribers,
         context,
         jobId: analysisJobId
       };
       
       console.log('Calling Supabase edge function for AI insights processing...');
-      
-      // Start the real processing via Supabase edge function
-      const response = await fetch(`${supabaseUrl}/functions/v1/process-email-insights`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
+      console.log('Supabase URL:', supabaseUrl);
+      console.log('Supabase Key exists:', !!supabaseKey);
+      console.log('Payload sizes:', {
+        campaigns: limitedCampaigns.length,
+        flows: limitedFlows.length,
+        subscribers: limitedSubscribers.length,
+        originalSizes: {
+          campaigns: this.campaigns.length,
+          flows: this.flows.length,
+          subscribers: this.subscribers.length
+        }
       });
       
-      if (!response.ok) {
-        throw new Error(`API call failed: ${response.status} ${response.statusText}`);
+      // Start the real processing via Supabase edge function
+      const { data, error } = await supabase.functions.invoke('process-email-insights', {
+        body: payload
+      });
+      
+      if (error) {
+        console.error('Supabase function error:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        
+        // Try direct fetch as fallback
+        console.log('Attempting direct fetch as fallback...');
+        try {
+          const response = await fetch(`${supabaseUrl}/functions/v1/process-email-insights`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+            },
+            body: JSON.stringify(payload)
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          
+          const fallbackData = await response.json();
+          console.log('Direct fetch succeeded:', fallbackData);
+          
+          // Process successful response from direct fetch
+          if (fallbackData.success) {
+            return {
+              executiveSummary: {
+                totalRevenue: '$0',
+                dateRange: '90 days',
+                keyFindings: ['Direct fetch successful'],
+                metrics: [
+                  { value: String(fallbackData.data?.insightsGenerated || 0), label: 'Insights Generated' },
+                  { value: '100%', label: 'Processing Complete' }
+                ]
+              },
+              categories: [],
+              topPriorities: [
+                {
+                  title: 'Analysis Complete',
+                  impact: `Generated ${fallbackData.data?.insightsGenerated || 0} insights`
+                }
+              ]
+            };
+          }
+          
+        } catch (fallbackError) {
+          console.error('Direct fetch also failed:', fallbackError);
+          throw new Error(error.message || 'Failed to process insights');
+        }
       }
       
-      const result = await response.json();
+      const result = data;
       console.log('Edge function response:', result);
       
-      // For now, return a mock report structure
-      // In a real implementation, you would wait for the job completion
-      // and retrieve the final report from the database
+      // Process the actual insights from the edge function
+      const insights = result?.data?.insights || [];
+      console.log('Processing', insights.length, 'insights from edge function');
+      
+      // Convert edge function insights to our format
+      const categorizedInsights: { [key: string]: any[] } = {};
+      const topPriorities: any[] = [];
+      
+      insights.forEach((insight: any) => {
+        const category = insight.category || 'campaign-insights';
+        if (!categorizedInsights[category]) {
+          categorizedInsights[category] = [];
+        }
+        
+        // Transform to match ProcessedInsight interface expected by UI
+        categorizedInsights[category].push({
+          title: insight.title || insight.insightId.replace(/([A-Z])/g, ' $1').replace(/^./, (str: string) => str.toUpperCase()),
+          summary: insight.summary || (insight.recommendations?.length > 0 ? 
+            insight.recommendations[0] : 
+            'Analysis completed with findings'),
+          actionsTitle: 'Recommended Actions',
+          actions: insight.recommendations || [
+            'Review the analysis details',
+            'Consider implementing suggested optimizations', 
+            'Monitor performance after changes'
+          ]
+        });
+
+        // Add high-significance insights to top priorities
+        if (insight.significance > 0.7) {
+          topPriorities.push({
+            insight: insight,
+            urgency: 'high' as const,
+            estimatedImpact: insight.recommendations?.[0] || 'High impact finding'
+          });
+        }
+      });
+      
       return {
         executiveSummary: {
-          totalRevenue: '$0',
+          totalRevenue: result?.data?.insights?.find((i: any) => i.data?.totalRevenue)?.data?.totalRevenue || '$0',
           dateRange: '90 days',
-          keyFindings: ['Analysis in progress...'],
+          keyFindings: insights.map((i: any) => i.title).slice(0, 3),
           metrics: [
-            { value: '0', label: 'Insights Generated' },
-            { value: '0%', label: 'Estimated Impact' }
+            { value: String(insights.length), label: 'Insights Generated' },
+            { value: String(result?.data?.campaignsProcessed || 0), label: 'Campaigns Analyzed' }
           ]
         },
-        categories: [], // Will be populated when analysis completes
-        topPriorities: [
-          {
-            title: 'Analysis in Progress',
-            impact: 'Please wait for completion'
-          }
-        ]
+        categories: Object.entries(categorizedInsights).map(([name, items]) => ({
+          icon: null as any, // Icon will be set in the component
+          title: name.charAt(0).toUpperCase() + name.slice(1).replace('-', ' '),
+          insights: items
+        })),
+        topPriorities,
+        enhancedAnalysis: result?.data?.enhancedAnalysis || null
       };
     } catch (error) {
       console.error('Error starting AI insights processing:', error);
@@ -448,8 +544,9 @@ export class AIInsightsController {
       .slice(0, 5);
     
     return topScored.map(scored => ({
-      title: scored.insight.summary || this.getInsightTitle(scored.insight.insightId),
-      impact: scored.impact
+      insight: scored.insight,
+      urgency: scored.score >= 4 ? 'high' as const : scored.score >= 2 ? 'medium' as const : 'low' as const,
+      estimatedImpact: scored.impact
     }));
   }
 

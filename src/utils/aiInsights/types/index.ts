@@ -38,14 +38,60 @@ export interface ExecutiveSummaryData {
 }
 
 export interface TopPriority {
+  insight: InsightResult;
+  urgency: 'high' | 'medium' | 'low';
+  estimatedImpact: string;
+}
+
+// Enhanced Analysis Types
+export interface EnhancedInsight {
+  originalInsight: {
+    insightId: string;
+    title: string;
+    category: string;
+    data: any;
+    significance: number;
+    confidence: number;
+    recommendations: string[];
+  };
+  aiEnhancement: {
+    deeperAnalysis: string;
+    rootCause: string;
+    predictedImpact: string;
+    specificActions: string[];
+  };
+}
+
+export interface CustomDiscovery {
   title: string;
-  impact: string;
+  finding: string;
+  evidence: string;
+  estimatedValue: number;
+  implementation: string;
+}
+
+export interface StrategicSynthesis {
+  biggestOpportunity: string;
+  primaryRisk: string;
+  prioritizedActions: Array<{
+    action: string;
+    expectedROI: string;
+    timeframe: string;
+    effort: 'low' | 'medium' | 'high';
+  }>;
+}
+
+export interface EnhancedAnalysis {
+  insights: { [insightId: string]: EnhancedInsight };
+  customDiscoveries: CustomDiscovery[];
+  strategicSynthesis: StrategicSynthesis;
 }
 
 export interface AIInsightsReport {
   executiveSummary: ExecutiveSummaryData;
   categories: InsightCategory[];
   topPriorities: TopPriority[];
+  enhancedAnalysis?: EnhancedAnalysis;
 }
 
 // Significance thresholds

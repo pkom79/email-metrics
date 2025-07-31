@@ -39,18 +39,18 @@ export class CampaignProcessor {
 
     const optimalLength = this.findOptimalRange(subjectAnalysis, 'length', 'revenuePerEmail')
     
-    const emojiLift = ((avgRevenueWithEmoji - avgRevenueWithoutEmoji) / avgRevenueWithoutEmoji) * 100
-    const numbersLift = ((avgRevenueWithNumbers - avgRevenueWithoutNumbers) / avgRevenueWithoutNumbers) * 100
-    const urgencyLift = ((avgRevenueWithUrgency - avgRevenueWithoutUrgency) / avgRevenueWithoutUrgency) * 100
+    const emojiLift = (avgRevenueWithoutEmoji > 0) ? ((avgRevenueWithEmoji - avgRevenueWithoutEmoji) / avgRevenueWithoutEmoji) * 100 : 0
+    const numbersLift = (avgRevenueWithoutNumbers > 0) ? ((avgRevenueWithNumbers - avgRevenueWithoutNumbers) / avgRevenueWithoutNumbers) * 100 : 0
+    const urgencyLift = (avgRevenueWithoutUrgency > 0) ? ((avgRevenueWithUrgency - avgRevenueWithoutUrgency) / avgRevenueWithoutUrgency) * 100 : 0
 
     return {
       insightId: "subject-line-revenue-drivers",
       title: "Subject Line Revenue Drivers",
       category: "campaign-optimization",
       data: {
-        emojiLift: emojiLift.toFixed(1),
-        numbersLift: numbersLift.toFixed(1),
-        urgencyLift: urgencyLift.toFixed(1),
+        emojiLift: (emojiLift || 0).toFixed(1),
+        numbersLift: (numbersLift || 0).toFixed(1),
+        urgencyLift: (urgencyLift || 0).toFixed(1),
         optimalLength: optimalLength,
         totalCampaignsAnalyzed: this.campaigns.length
       },
@@ -97,9 +97,9 @@ export class CampaignProcessor {
       avgRevenuePerEmail: this.calculateAverage(campaigns.map(c => c.revenuePerEmail))
     }))
 
-    const bestSpacing = bucketStats.reduce((best, current) => 
+    const bestSpacing = bucketStats.length > 0 ? bucketStats.reduce((best, current) => 
       current.avgRevenuePerEmail > best.avgRevenuePerEmail ? current : best
-    )
+    ) : { bucket: 'none', count: 0, avgRevenuePerEmail: 0, avgOpenRate: 0, avgUnsubRate: 0 }
 
     return {
       insightId: "campaign-spacing-impact",
@@ -185,9 +185,13 @@ export class CampaignProcessor {
         themes: themeStats,
         topPerformer: topTheme,
         bottomPerformer: bottomTheme,
-        performanceGap: ((topTheme.avgRevenuePerEmail - bottomTheme.avgRevenuePerEmail) / bottomTheme.avgRevenuePerEmail * 100).toFixed(1)
+        performanceGap: (bottomTheme.avgRevenuePerEmail > 0) ? 
+          ((topTheme.avgRevenuePerEmail - bottomTheme.avgRevenuePerEmail) / bottomTheme.avgRevenuePerEmail * 100).toFixed(1) : 
+          "0.0"
       },
-      significance: (topTheme.avgRevenuePerEmail - bottomTheme.avgRevenuePerEmail) / bottomTheme.avgRevenuePerEmail,
+      significance: (bottomTheme.avgRevenuePerEmail > 0) ? 
+        (topTheme.avgRevenuePerEmail - bottomTheme.avgRevenuePerEmail) / bottomTheme.avgRevenuePerEmail : 
+        0,
       confidence: this.campaigns.length > 30 ? 0.8 : 0.6,
       recommendations: [
         `Focus more on ${topTheme.theme} themed campaigns`,
@@ -238,7 +242,7 @@ export class CampaignProcessor {
       confidence: perfectCampaigns.length > 5 ? 0.9 : 0.6,
       recommendations: [
         "Replicate patterns found in perfect campaigns",
-        `Target metrics: ${benchmarks.openRate.toFixed(1)}% open rate, ${benchmarks.clickRate.toFixed(1)}% click rate`,
+        `Target metrics: ${(benchmarks.openRate || 0).toFixed(1)}% open rate, ${(benchmarks.clickRate || 0).toFixed(1)}% click rate`,
         "Focus on list health while driving revenue",
         "Use successful campaign elements as templates"
       ]
@@ -250,6 +254,7 @@ export class CampaignProcessor {
   }
 
   private calculatePercentile(values: number[], percentile: number): number {
+    if (values.length === 0) return 0
     const sorted = [...values].sort((a, b) => a - b)
     const index = Math.ceil((percentile / 100) * sorted.length) - 1
     return sorted[Math.max(0, index)]
@@ -272,9 +277,9 @@ export class CampaignProcessor {
       avg: this.calculateAverage(bucket.values)
     })).filter(bucket => bucket.values.length > 0)
 
-    const best = bucketAvgs.reduce((best, current) => 
+    const best = bucketAvgs.length > 0 ? bucketAvgs.reduce((best, current) => 
       current.avg > best.avg ? current : best
-    )
+    ) : { min: 0, max: 10, values: [], avg: 0 }
 
     return { min: best.min, max: best.max }
   }
@@ -341,7 +346,9 @@ export class CampaignProcessor {
       return acc
     }, {} as Record<number, number>)
 
-    const mostCommonDay = Object.entries(daycounts).reduce((a, b) => daycounts[parseInt(a[0])] > daycounts[parseInt(b[0])] ? a : b)[0]
+    const mostCommonDay = Object.entries(daycounts).length > 0 ? 
+      Object.entries(daycounts).reduce((a, b) => daycounts[parseInt(a[0])] > daycounts[parseInt(b[0])] ? a : b)[0] :
+      '0'
     return days[parseInt(mostCommonDay)]
   }
 
@@ -352,6 +359,8 @@ export class CampaignProcessor {
       return acc
     }, {} as Record<number, number>)
 
-    return parseInt(Object.entries(hourCounts).reduce((a, b) => hourCounts[parseInt(a[0])] > hourCounts[parseInt(b[0])] ? a : b)[0])
+    return Object.entries(hourCounts).length > 0 ?
+      parseInt(Object.entries(hourCounts).reduce((a, b) => hourCounts[parseInt(a[0])] > hourCounts[parseInt(b[0])] ? a : b)[0]) :
+      0
   }
 }
