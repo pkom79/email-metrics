@@ -223,8 +223,8 @@ const UploadPage: React.FC<UploadPageProps> = ({ uploads, onFileUpload, onAnalyz
                   className="h-1 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-300"
                   style={{
                     width: `${zone.id === 'campaigns' ? processingProgress.campaigns.progress :
-                        zone.id === 'flows' ? processingProgress.flows.progress :
-                          processingProgress.subscribers.progress
+                      zone.id === 'flows' ? processingProgress.flows.progress :
+                        processingProgress.subscribers.progress
                       }%`
                   }}
                 />
@@ -261,7 +261,7 @@ const UploadPage: React.FC<UploadPageProps> = ({ uploads, onFileUpload, onAnalyz
                 text-5xl md:text-6xl font-bold mb-6 tracking-tight
                 ${isDarkMode ? 'text-white' : 'text-gray-900'}
               `}>
-                Email Analytics
+                Email Metrics
                 <span className="block bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                   Made Simple
                 </span>

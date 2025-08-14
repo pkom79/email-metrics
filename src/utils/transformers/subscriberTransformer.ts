@@ -11,43 +11,54 @@ export class SubscriberTransformer {
     }
 
     /**
-     * Transform a single subscriber
+     * Transform a single subscriber using exact header names only
      */
     private transformSingle(raw: RawSubscriberCSV): ProcessedSubscriber {
-        // Parse dates with fallbacks
+        // Dates
         const profileCreated = this.parseDate(raw['Profile Created On'] || raw['Date Added']) || new Date();
-        const firstActive = this.parseDate(raw['First Active']) || profileCreated;
-        // For lastActive, do NOT fallback to profileCreated; keep null if missing/invalid
+        const firstActiveRaw = this.parseDate(raw['First Active']);
+        const firstActive = firstActiveRaw || profileCreated;
         const lastActive = this.parseDate(raw['Last Active']);
+        const lastOpen = this.parseDate(raw['Last Open']);
+        const lastClick = this.parseDate(raw['Last Click']);
 
-        // Calculate lifetime in days
+        // Lifetime
         const lifetimeInDays = Math.floor(
             (this.REFERENCE_DATE.getTime() - profileCreated.getTime()) / (1000 * 60 * 60 * 24)
         );
 
-        // Parse numeric values
+        // Numbers (exact headers)
         const totalClv = this.parseNumber(raw['Total Customer Lifetime Value']);
         const predictedClv = this.parseNumber(raw['Predicted Customer Lifetime Value']);
         const avgOrderValue = this.parseNumber(raw['Average Order Value']);
         const totalOrders = Math.floor(this.parseNumber(raw['Historic Number Of Orders']));
+        const avgDaysBetweenOrders = this.parseOptionalNumber(raw['Average Days Between Orders']);
 
-        // Parse consent
-        const emailConsent = this.parseConsent(raw['Email Marketing Consent']);
+        // Consent (exact header)
+        const emailConsentRaw = (raw['Email Marketing Consent'] ?? '').toString();
+        const emailConsent = this.parseConsent(emailConsentRaw);
 
-        // Determine if buyer
+        // Suppressions (exact header)
+        const emailSuppressionsRaw = typeof raw['Email Suppressions'] === 'string'
+            ? (raw['Email Suppressions'] as string)
+            : String(raw['Email Suppressions'] ?? '');
+        const { suppressions, canReceiveEmail } = this.parseEmailSuppressions(emailSuppressionsRaw);
+
+        // Buyer flag
         const isBuyer = totalOrders > 0 || totalClv > 0;
 
         return {
-            id: raw['Klaviyo ID'],
-            email: raw['Email'],
-            firstName: raw['First Name'] || '',
-            lastName: raw['Last Name'] || '',
-            city: raw['City'] || '',
-            state: raw['State / Region'] || '',
-            country: raw['Country'] || '',
-            zipCode: raw['Zip Code'] || '',
-            source: raw['Source'] || 'Unknown',
+            id: (raw as any)['Klaviyo ID'] || '',
+            email: (raw as any)['Email'] || '',
+            firstName: (raw as any)['First Name'] || '',
+            lastName: (raw as any)['Last Name'] || '',
+            city: (raw as any)['City'] || '',
+            state: (raw as any)['State / Region'] || '',
+            country: (raw as any)['Country'] || '',
+            zipCode: (raw as any)['Zip Code'] || '',
+            source: (raw as any)['Source'] || 'Unknown',
             emailConsent,
+            emailConsentRaw,
             totalClv,
             predictedClv,
             avgOrderValue,
@@ -56,21 +67,25 @@ export class SubscriberTransformer {
             lastActive,
             profileCreated,
             isBuyer,
-            lifetimeInDays
+            lifetimeInDays,
+            emailSuppressions: suppressions,
+            canReceiveEmail,
+            avgDaysBetweenOrders,
+            // New activity fields
+            lastOpen,
+            lastClick,
+            firstActiveRaw
         };
     }
 
     /**
      * Parse date string to Date object
      */
-    private parseDate(dateStr: string | undefined | null): Date | null {
-        if (!dateStr) return null;
-
-        const date = new Date(dateStr);
-        if (isNaN(date.getTime())) {
-            return null;
-        }
-        return date;
+    private parseDate(dateStr: string | number | undefined | null): Date | null {
+        if (dateStr === undefined || dateStr === null || dateStr === '') return null;
+        const d = typeof dateStr === 'number' ? new Date(dateStr) : new Date(String(dateStr));
+        if (isNaN(d.getTime())) return null;
+        return d;
     }
 
     /**
@@ -80,39 +95,81 @@ export class SubscriberTransformer {
         if (value === undefined || value === null || value === '') {
             return 0;
         }
-
         if (typeof value === 'number') {
             return isNaN(value) ? 0 : value;
         }
-
-        const cleaned = value.toString()
-            .replace(/,/g, '')
-            .replace(/\$/g, '')
-            .trim();
-
+        const cleaned = value.toString().replace(/,/g, '').replace(/\$/g, '').trim();
         const parsed = parseFloat(cleaned);
         return isNaN(parsed) ? 0 : parsed;
     }
 
     /**
-     * Parse consent value (can be "TRUE", "FALSE", or a timestamp)
+     * Parse optional number: returns null when missing/empty
      */
-    private parseConsent(value: string | undefined | null): boolean {
-        if (!value) return false;
-
-        const upperValue = value.toString().toUpperCase().trim();
-
-        // Check for explicit TRUE/FALSE
-        if (upperValue === 'TRUE') return true;
-        if (upperValue === 'FALSE') return false;
-
-        // If it's a timestamp, consider it as consent given
-        const date = new Date(value);
-        if (!isNaN(date.getTime())) {
-            return true;
+    private parseOptionalNumber(value: string | number | undefined | null): number | null {
+        if (value === undefined || value === null || value === '') {
+            return null;
         }
+        if (typeof value === 'number') {
+            return isNaN(value) ? null : value;
+        }
+        const cleaned = value.toString().replace(/,/g, '').replace(/\$/g, '').trim();
+        const parsed = parseFloat(cleaned);
+        return isNaN(parsed) ? null : parsed;
+    }
 
+    /**
+     * Parse consent value (TRUE/FALSE or timestamp). NEVER_SUBSCRIBED is treated as no consent.
+     */
+    private parseConsent(value: string | number | undefined | null): boolean {
+        if (value === undefined || value === null) return false;
+        const str = String(value).toUpperCase().trim();
+        if (str === 'TRUE') return true;
+        if (str === 'FALSE') return false;
+        if (str === 'NEVER_SUBSCRIBED') return false;
+        const date = new Date(String(value));
+        if (!isNaN(date.getTime())) return true;
         return false;
+    }
+
+    /**
+     * Parse Email Suppressions raw string into array and determine canReceiveEmail
+     * - canReceiveEmail = true only when raw is exactly "[]"
+     * - Supports JSON array strings and comma/semicolon lists
+     */
+    private parseEmailSuppressions(raw: string | undefined): { suppressions: string[]; canReceiveEmail: boolean } {
+        if (!raw || raw.trim() === '') {
+            return { suppressions: [], canReceiveEmail: false };
+        }
+        const trimmed = raw.trim();
+        if (trimmed === '[]') {
+            return { suppressions: [], canReceiveEmail: true };
+        }
+        // Try JSON
+        const normalized = trimmed.replace(/""/g, '"');
+        if (normalized.startsWith('[') && normalized.endsWith(']')) {
+            try {
+                const parsed = JSON.parse(normalized);
+                if (Array.isArray(parsed)) {
+                    const tokens = parsed
+                        .map(v => (typeof v === 'string' ? v : String(v)))
+                        .map(v => v.replace(/^\s*['\"]?|['\"]?\s*$/g, ''))
+                        .map(v => v.toUpperCase().trim())
+                        .filter(Boolean);
+                    return { suppressions: tokens, canReceiveEmail: false };
+                }
+            } catch {
+                // fall through
+            }
+        }
+        // Fallback split
+        const parts = normalized
+            .replace(/^\[/, '').replace(/\]$/, '')
+            .split(/[,;|]/)
+            .map(p => p.replace(/^\s*['\"]?|['\"]?\s*$/g, ''))
+            .map(p => p.toUpperCase().trim())
+            .filter(Boolean);
+        return { suppressions: parts, canReceiveEmail: false };
     }
 
     /**

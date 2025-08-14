@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
-import { Calendar, Upload, AlertCircle, ChevronDown, Brain, ChevronRight, BarChart3, Zap, Send, Mail, Star } from 'lucide-react';
+import { Calendar, Upload, AlertCircle, ChevronDown, BarChart3, Zap, Send, Mail, Star } from 'lucide-react';
 import MetricCard from './MetricCard';
-import AIReportTemplate from './AIReportTemplate';
 import 'tailwindcss/tailwind.css';
 import AudienceCharts from './AudienceCharts';
-import InsightsModal from './InsightsModal';
 import DayOfWeekPerformance from './DayOfWeekPerformance';
 import HourOfDayPerformance from './HourOfDayPerformance';
 import FlowStepAnalysis from './FlowStepAnalysis';
 import { DataManager } from '../utils/dataManager';
-import { ProcessedCampaign, ProcessedFlowEmail } from '../utils/dataTypes';
+import { ProcessedCampaign } from '../utils/dataTypes';
 import CustomSegmentBlock from './CustomSegmentBlock';
 
 interface DashboardProps {
@@ -18,18 +16,25 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
-  // const [aiReport, setAIReport] = useState<string | null>(null);
-  const [loadingAI, setLoadingAI] = useState(false);
   const [dateRange, setDateRange] = useState('30d');
   const [selectedFlow, setSelectedFlow] = useState('all');
   const [selectedCampaignMetric, setSelectedCampaignMetric] = useState('revenue');
   const [displayedCampaigns, setDisplayedCampaigns] = useState(5);
   const [isSticky, setIsSticky] = useState(false);
-  const [showInsightsModal, setShowInsightsModal] = useState(false);
-  const [insightsData, setInsightsData] = useState(null);
-  const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
-  const [showAIAnalysis, setShowAIAnalysis] = useState(false);
-  const [aiAnalysisStarted, setAiAnalysisStarted] = useState(false);
+  // const [showInsightsModal, setShowInsightsModal] = useState(false);
+  // const [insightsData, _setInsightsData] = useState<any>(null);
+  // const [isGeneratingInsights, _setIsGeneratingInsights] = useState(false);
+  // const [aiAnalysisStarted, setAiAnalysisStarted] = useState(false);
+  // const [aiReport, setAiReport] = useState<AIInsightsReport | null>(null);
+  // const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  // const [showCompanyModal, setShowCompanyModal] = useState(false);
+  // const [companyName, setCompanyName] = useState('');
+  // const [companyDescription, setCompanyDescription] = useState('');
+
+  // Validation for modal inputs
+  // const nameOk = companyName.trim().length >= 2;
+  // const descOk = companyDescription.trim().length >= 20;
+  // const canRun = nameOk && descOk;
 
   // Get data from DataManager
   const dataManager = DataManager.getInstance();
@@ -39,21 +44,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   // Check if we have any data
   const hasData = ALL_CAMPAIGNS.length > 0 || ALL_FLOW_EMAILS.length > 0;
 
-  // Helper function wrappers
-  const getUniqueFlowNames = () => dataManager.getUniqueFlowNames();
-  const getLastEmailDate = () => dataManager.getLastEmailDate();
-  const getMetricTimeSeries = (campaigns: ProcessedCampaign[], flows: ProcessedFlowEmail[], metricKey: string, dateRange: string, granularity: 'daily' | 'weekly' | 'monthly') =>
-    dataManager.getMetricTimeSeries(campaigns, flows, metricKey, dateRange, granularity);
   // Use DataManager's consistent granularity logic for all charts
   const getGranularityForDateRange = (dateRange: string) => dataManager.getGranularityForDateRange(dateRange);
-  const getAggregatedMetricsForPeriod = (campaigns: ProcessedCampaign[], flows: ProcessedFlowEmail[], startDate: Date, endDate: Date) =>
-    dataManager.getAggregatedMetricsForPeriod(campaigns, flows, startDate, endDate);
-  const getAudienceInsights = () => dataManager.getAudienceInsights();
+
+  // NEW: global granularity state, defaulting from DataManager
+  const [granularity, setGranularity] = useState<'daily' | 'weekly' | 'monthly'>(getGranularityForDateRange(dateRange));
+
+  // Reset granularity when dateRange changes (user can override after)
+  React.useEffect(() => {
+    setGranularity(getGranularityForDateRange(dateRange));
+  }, [dateRange]);
 
   // Create a stable reference date that won't change
   const REFERENCE_DATE = React.useMemo(() => {
     if (hasData) {
-      return getLastEmailDate();
+      return dataManager.getLastEmailDate();
     }
     return new Date();
   }, [hasData]);
@@ -192,7 +197,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
       result[key] = {
         value,
         change: changeData.changePercent,
-        isPositive: changeData.isPositive
+        isPositive: changeData.isPositive,
+        previousValue: changeData.previousValue,
+        previousPeriod: changeData.previousPeriod
       };
     });
 
@@ -256,7 +263,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
       result[key] = {
         value,
         change: changeData.changePercent,
-        isPositive: changeData.isPositive
+        isPositive: changeData.isPositive,
+        previousValue: changeData.previousValue,
+        previousPeriod: changeData.previousPeriod
       };
     });
 
@@ -316,11 +325,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
     const result: any = {};
 
     metrics.forEach(({ key, value }) => {
-      const changeData = dataManager.calculatePeriodOverPeriodChange(key, dateRange, 'flows');
+      const changeData = dataManager.calculatePeriodOverPeriodChange(
+        key,
+        dateRange,
+        'flows',
+        { flowName: selectedFlow }
+      );
       result[key] = {
         value,
         change: changeData.changePercent,
-        isPositive: changeData.isPositive
+        isPositive: changeData.isPositive,
+        previousValue: changeData.previousValue,
+        previousPeriod: changeData.previousPeriod
       };
     });
 
@@ -328,56 +344,54 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
   }, [filteredFlowEmails, dateRange]);
 
   // Generate sparkline data for all metrics using consistent rules
-  const granularity = React.useMemo(() => getGranularityForDateRange(dateRange), [dateRange]);
-
   const overviewSparklineData = React.useMemo(() => {
     return {
-      totalRevenue: getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'revenue', dateRange, granularity),
-      averageOrderValue: getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'avgOrderValue', dateRange, granularity),
-      revenuePerEmail: getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'revenuePerEmail', dateRange, granularity),
-      openRate: getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'openRate', dateRange, granularity),
-      clickRate: getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'clickRate', dateRange, granularity),
-      clickToOpenRate: getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'clickToOpenRate', dateRange, granularity),
-      emailsSent: getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'emailsSent', dateRange, granularity),
-      totalOrders: getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'totalOrders', dateRange, granularity),
-      conversionRate: getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'conversionRate', dateRange, granularity),
-      unsubscribeRate: getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'unsubscribeRate', dateRange, granularity),
-      spamRate: getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'spamRate', dateRange, granularity),
-      bounceRate: getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'bounceRate', dateRange, granularity)
+      totalRevenue: dataManager.getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'revenue', dateRange, granularity),
+      averageOrderValue: dataManager.getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'avgOrderValue', dateRange, granularity),
+      revenuePerEmail: dataManager.getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'revenuePerEmail', dateRange, granularity),
+      openRate: dataManager.getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'openRate', dateRange, granularity),
+      clickRate: dataManager.getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'clickRate', dateRange, granularity),
+      clickToOpenRate: dataManager.getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'clickToOpenRate', dateRange, granularity),
+      emailsSent: dataManager.getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'emailsSent', dateRange, granularity),
+      totalOrders: dataManager.getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'totalOrders', dateRange, granularity),
+      conversionRate: dataManager.getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'conversionRate', dateRange, granularity),
+      unsubscribeRate: dataManager.getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'unsubscribeRate', dateRange, granularity),
+      spamRate: dataManager.getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'spamRate', dateRange, granularity),
+      bounceRate: dataManager.getMetricTimeSeries(filteredCampaigns, filteredFlowEmails, 'bounceRate', dateRange, granularity)
     };
   }, [filteredCampaigns, filteredFlowEmails, dateRange, granularity]);
 
   const campaignSparklineData = React.useMemo(() => {
     return {
-      totalRevenue: getMetricTimeSeries(filteredCampaigns, [], 'revenue', dateRange, granularity),
-      averageOrderValue: getMetricTimeSeries(filteredCampaigns, [], 'avgOrderValue', dateRange, granularity),
-      revenuePerEmail: getMetricTimeSeries(filteredCampaigns, [], 'revenuePerEmail', dateRange, granularity),
-      openRate: getMetricTimeSeries(filteredCampaigns, [], 'openRate', dateRange, granularity),
-      clickRate: getMetricTimeSeries(filteredCampaigns, [], 'clickRate', dateRange, granularity),
-      clickToOpenRate: getMetricTimeSeries(filteredCampaigns, [], 'clickToOpenRate', dateRange, granularity),
-      emailsSent: getMetricTimeSeries(filteredCampaigns, [], 'emailsSent', dateRange, granularity),
-      totalOrders: getMetricTimeSeries(filteredCampaigns, [], 'totalOrders', dateRange, granularity),
-      conversionRate: getMetricTimeSeries(filteredCampaigns, [], 'conversionRate', dateRange, granularity),
-      unsubscribeRate: getMetricTimeSeries(filteredCampaigns, [], 'unsubscribeRate', dateRange, granularity),
-      spamRate: getMetricTimeSeries(filteredCampaigns, [], 'spamRate', dateRange, granularity),
-      bounceRate: getMetricTimeSeries(filteredCampaigns, [], 'bounceRate', dateRange, granularity)
+      totalRevenue: dataManager.getMetricTimeSeries(filteredCampaigns, [], 'revenue', dateRange, granularity),
+      averageOrderValue: dataManager.getMetricTimeSeries(filteredCampaigns, [], 'avgOrderValue', dateRange, granularity),
+      revenuePerEmail: dataManager.getMetricTimeSeries(filteredCampaigns, [], 'revenuePerEmail', dateRange, granularity),
+      openRate: dataManager.getMetricTimeSeries(filteredCampaigns, [], 'openRate', dateRange, granularity),
+      clickRate: dataManager.getMetricTimeSeries(filteredCampaigns, [], 'clickRate', dateRange, granularity),
+      clickToOpenRate: dataManager.getMetricTimeSeries(filteredCampaigns, [], 'clickToOpenRate', dateRange, granularity),
+      emailsSent: dataManager.getMetricTimeSeries(filteredCampaigns, [], 'emailsSent', dateRange, granularity),
+      totalOrders: dataManager.getMetricTimeSeries(filteredCampaigns, [], 'totalOrders', dateRange, granularity),
+      conversionRate: dataManager.getMetricTimeSeries(filteredCampaigns, [], 'conversionRate', dateRange, granularity),
+      unsubscribeRate: dataManager.getMetricTimeSeries(filteredCampaigns, [], 'unsubscribeRate', dateRange, granularity),
+      spamRate: dataManager.getMetricTimeSeries(filteredCampaigns, [], 'spamRate', dateRange, granularity),
+      bounceRate: dataManager.getMetricTimeSeries(filteredCampaigns, [], 'bounceRate', dateRange, granularity)
     };
   }, [filteredCampaigns, dateRange, granularity]);
 
   const flowSparklineData = React.useMemo(() => {
     return {
-      totalRevenue: getMetricTimeSeries([], filteredFlowEmails, 'revenue', dateRange, granularity),
-      averageOrderValue: getMetricTimeSeries([], filteredFlowEmails, 'avgOrderValue', dateRange, granularity),
-      revenuePerEmail: getMetricTimeSeries([], filteredFlowEmails, 'revenuePerEmail', dateRange, granularity),
-      openRate: getMetricTimeSeries([], filteredFlowEmails, 'openRate', dateRange, granularity),
-      clickRate: getMetricTimeSeries([], filteredFlowEmails, 'clickRate', dateRange, granularity),
-      clickToOpenRate: getMetricTimeSeries([], filteredFlowEmails, 'clickToOpenRate', dateRange, granularity),
-      emailsSent: getMetricTimeSeries([], filteredFlowEmails, 'emailsSent', dateRange, granularity),
-      totalOrders: getMetricTimeSeries([], filteredFlowEmails, 'totalOrders', dateRange, granularity),
-      conversionRate: getMetricTimeSeries([], filteredFlowEmails, 'conversionRate', dateRange, granularity),
-      unsubscribeRate: getMetricTimeSeries([], filteredFlowEmails, 'unsubscribeRate', dateRange, granularity),
-      spamRate: getMetricTimeSeries([], filteredFlowEmails, 'spamRate', dateRange, granularity),
-      bounceRate: getMetricTimeSeries([], filteredFlowEmails, 'bounceRate', dateRange, granularity)
+      totalRevenue: dataManager.getMetricTimeSeries([], filteredFlowEmails, 'revenue', dateRange, granularity),
+      averageOrderValue: dataManager.getMetricTimeSeries([], filteredFlowEmails, 'avgOrderValue', dateRange, granularity),
+      revenuePerEmail: dataManager.getMetricTimeSeries([], filteredFlowEmails, 'revenuePerEmail', dateRange, granularity),
+      openRate: dataManager.getMetricTimeSeries([], filteredFlowEmails, 'openRate', dateRange, granularity),
+      clickRate: dataManager.getMetricTimeSeries([], filteredFlowEmails, 'clickRate', dateRange, granularity),
+      clickToOpenRate: dataManager.getMetricTimeSeries([], filteredFlowEmails, 'clickToOpenRate', dateRange, granularity),
+      emailsSent: dataManager.getMetricTimeSeries([], filteredFlowEmails, 'emailsSent', dateRange, granularity),
+      totalOrders: dataManager.getMetricTimeSeries([], filteredFlowEmails, 'totalOrders', dateRange, granularity),
+      conversionRate: dataManager.getMetricTimeSeries([], filteredFlowEmails, 'conversionRate', dateRange, granularity),
+      unsubscribeRate: dataManager.getMetricTimeSeries([], filteredFlowEmails, 'unsubscribeRate', dateRange, granularity),
+      spamRate: dataManager.getMetricTimeSeries([], filteredFlowEmails, 'spamRate', dateRange, granularity),
+      bounceRate: dataManager.getMetricTimeSeries([], filteredFlowEmails, 'bounceRate', dateRange, granularity)
     };
   }, [filteredFlowEmails, dateRange, granularity]);
 
@@ -451,113 +465,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
     setDisplayedCampaigns(prev => Math.min(prev + 5, sortedCampaigns.length));
   };
 
-  const generateInsights = async () => {
-    setIsGeneratingInsights(true);
-    setShowInsightsModal(true);
-
-    try {
-      // Calculate current period metrics
-      const endDate = new Date(REFERENCE_DATE);
-      let startDate = new Date(endDate);
-
-      if (dateRange === 'all') {
-        const oldestCampaign = Math.min(...ALL_CAMPAIGNS.map(c => c.sentDate.getTime()));
-        const oldestFlow = Math.min(...ALL_FLOW_EMAILS.map(f => f.sentDate.getTime()));
-        startDate = new Date(Math.min(oldestCampaign, oldestFlow));
-      } else {
-        const days = parseInt(dateRange.replace('d', ''));
-        startDate.setDate(startDate.getDate() - days);
-      }
-
-      const currentPeriod = getAggregatedMetricsForPeriod(ALL_CAMPAIGNS, ALL_FLOW_EMAILS, startDate, endDate);
-
-      // Calculate previous period for comparison
-      const periodLength = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-      const prevEndDate = new Date(startDate);
-      const prevStartDate = new Date(prevEndDate);
-      prevStartDate.setDate(prevStartDate.getDate() - periodLength);
-
-      const previousPeriod = getAggregatedMetricsForPeriod(ALL_CAMPAIGNS, ALL_FLOW_EMAILS, prevStartDate, prevEndDate);
-
-      // Get top and bottom performers
-      const topCampaigns = [...filteredCampaigns]
-        .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 3);
-
-      const bottomCampaigns = [...filteredCampaigns]
-        .sort((a, b) => a.revenue - b.revenue)
-        .slice(0, 3);
-
-      // Get flow performance data grouped by flow name
-      const flowsByName = filteredFlowEmails.reduce((acc, email) => {
-        if (!acc[email.flowName]) {
-          acc[email.flowName] = {
-            flowName: email.flowName,
-            totalRevenue: 0,
-            totalEmailsSent: 0,
-            totalOpens: 0,
-            totalClicks: 0,
-            totalOrders: 0
-          };
-        }
-
-        acc[email.flowName].totalRevenue += email.revenue;
-        acc[email.flowName].totalEmailsSent += email.emailsSent;
-        acc[email.flowName].totalOpens += email.uniqueOpens;
-        acc[email.flowName].totalClicks += email.uniqueClicks;
-        acc[email.flowName].totalOrders += email.totalOrders;
-
-        return acc;
-      }, {} as Record<string, any>);
-
-      const flows = Object.values(flowsByName).map((flow: any) => ({
-        ...flow,
-        openRate: flow.totalEmailsSent > 0 ? (flow.totalOpens / flow.totalEmailsSent) * 100 : 0,
-        revenue: flow.totalRevenue
-      }));
-
-      const topFlows = flows.sort((a, b) => b.revenue - a.revenue).slice(0, 3);
-      const bottomFlows = flows.sort((a, b) => a.revenue - b.revenue).slice(0, 3);
-
-      // Get audience insights
-      const audienceInsights = getAudienceInsights();
-
-      // Prepare data for API call
-      const payload = {
-        currentPeriod,
-        previousPeriod,
-        topCampaigns,
-        bottomCampaigns,
-        topFlows,
-        bottomFlows,
-        audienceInsights,
-        dateRange
-      };
-
-      // Call the edge function
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-email-data`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate insights');
-      }
-
-      const data = await response.json();
-      setInsightsData(data.insights);
-
-    } catch (error) {
-      console.error('Error generating insights:', error);
-      setInsightsData(null);
-    } finally {
-      setIsGeneratingInsights(false);
-    }
-  };
+  const getLastEmailDate = () => dataManager.getLastEmailDate();
 
   // If no data is loaded, show a message
   if (!hasData) {
@@ -600,7 +508,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
                 Last updated: {new Date().toLocaleDateString()}
               </p>
               <p className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
-                Showing {filteredCampaigns.length} campaigns, {filteredFlowEmails.length} flow emails
+                Showing {filteredCampaigns.length.toLocaleString()} campaigns, {filteredFlowEmails.length.toLocaleString()} flow emails
               </p>
             </div>
 
@@ -622,22 +530,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
                   <span>Upload New Reports</span>
                 </div>
               </button>
-
-              <button
-                onClick={() => {
-                  // Scroll to AI Email Insights section
-                  const aiSection = document.getElementById('ai-email-insights');
-                  if (aiSection) {
-                    aiSection.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }}
-                className="px-4 py-1.5 rounded-md text-sm font-semibold transition-all duration-200 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 hover:shadow-md text-white"
-              >
-                <div className="flex items-center gap-1.5">
-                  <Brain className="w-3.5 h-3.5" />
-                  <span>Get AI Insights</span>
-                </div>
-              </button>
             </div>
           </div>
         </div>
@@ -646,17 +538,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
       {/* Sticky Date Range Selector */}
       <div className={`${isSticky ? 'fixed top-0 left-0 right-0 z-50 shadow-lg' : ''} ${isDarkMode ? 'bg-gray-900' : 'bg-white'} border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} p-4`}>
         <div className="max-w-7xl mx-auto">
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
             <div className="flex items-center gap-2">
               <Calendar className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
               <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Date Range:</span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 whitespace-nowrap">
               {dateRangeOptions.map(option => (
                 <button
                   key={option.value}
                   onClick={() => setDateRange(option.value)}
-                  className={`px-3 py-1 rounded text-sm font-medium transition-colors ${dateRange === option.value
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${dateRange === option.value
                     ? 'bg-purple-600 text-white'
                     : `${isDarkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`
                     }`}
@@ -664,6 +556,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
                   {option.label}
                 </button>
               ))}
+            </div>
+
+            {/* NEW: Granularity Toggle with icon */}
+            <div className="flex items-center gap-2">
+              <BarChart3 className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+              <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Granularity:</span>
+              <div className="flex gap-1.5 whitespace-nowrap">
+                {(['daily', 'weekly', 'monthly'] as const).map(g => (
+                  <button
+                    key={g}
+                    onClick={() => setGranularity(g)}
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${granularity === g
+                      ? 'bg-purple-600 text-white'
+                      : `${isDarkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`
+                      }`}
+                  >
+                    {g.charAt(0).toUpperCase() + g.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -696,18 +608,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
               </h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              <MetricCard title="Total Revenue" value={formatCurrency(overviewMetrics.totalRevenue.value)} change={overviewMetrics.totalRevenue.change} isPositive={overviewMetrics.totalRevenue.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} sparklineData={overviewSparklineData.totalRevenue} />
-              <MetricCard title="Average Order Value" value={formatCurrency(overviewMetrics.averageOrderValue.value)} change={overviewMetrics.averageOrderValue.change} isPositive={overviewMetrics.averageOrderValue.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} sparklineData={overviewSparklineData.averageOrderValue} />
-              <MetricCard title="Revenue per Email" value={formatCurrency(overviewMetrics.revenuePerEmail.value)} change={overviewMetrics.revenuePerEmail.change} isPositive={overviewMetrics.revenuePerEmail.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="revenuePerEmail" sparklineData={overviewSparklineData.revenuePerEmail} />
-              <MetricCard title="Open Rate" value={formatPercent(overviewMetrics.openRate.value)} change={overviewMetrics.openRate.change} isPositive={overviewMetrics.openRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="openRate" sparklineData={overviewSparklineData.openRate} />
-              <MetricCard title="Click Rate" value={formatPercent(overviewMetrics.clickRate.value)} change={overviewMetrics.clickRate.change} isPositive={overviewMetrics.clickRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="clickRate" sparklineData={overviewSparklineData.clickRate} />
-              <MetricCard title="Click-to-Open Rate" value={formatPercent(overviewMetrics.clickToOpenRate.value)} change={overviewMetrics.clickToOpenRate.change} isPositive={overviewMetrics.clickToOpenRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="clickToOpenRate" sparklineData={overviewSparklineData.clickToOpenRate} />
-              <MetricCard title="Emails Sent" value={formatNumber(overviewMetrics.emailsSent.value)} change={overviewMetrics.emailsSent.change} isPositive={overviewMetrics.emailsSent.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} sparklineData={overviewSparklineData.emailsSent} />
-              <MetricCard title="Total Orders" value={formatNumber(overviewMetrics.totalOrders.value)} change={overviewMetrics.totalOrders.change} isPositive={overviewMetrics.totalOrders.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} sparklineData={overviewSparklineData.totalOrders} />
-              <MetricCard title="Conversion Rate" value={formatPercent(overviewMetrics.conversionRate.value)} change={overviewMetrics.conversionRate.change} isPositive={overviewMetrics.conversionRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="conversionRate" sparklineData={overviewSparklineData.conversionRate} />
-              <MetricCard title="Unsubscribe Rate" value={formatPercent(overviewMetrics.unsubscribeRate.value)} change={overviewMetrics.unsubscribeRate.change} isPositive={overviewMetrics.unsubscribeRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="unsubscribeRate" isNegativeMetric sparklineData={overviewSparklineData.unsubscribeRate} />
-              <MetricCard title="Spam Rate" value={formatPercent(overviewMetrics.spamRate.value)} change={overviewMetrics.spamRate.change} isPositive={overviewMetrics.spamRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="spamRate" isNegativeMetric sparklineData={overviewSparklineData.spamRate} />
-              <MetricCard title="Bounce Rate" value={formatPercent(overviewMetrics.bounceRate.value)} change={overviewMetrics.bounceRate.change} isPositive={overviewMetrics.bounceRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="bounceRate" isNegativeMetric sparklineData={overviewSparklineData.bounceRate} />
+              <MetricCard title="Total Revenue" value={formatCurrency(overviewMetrics.totalRevenue.value)} change={overviewMetrics.totalRevenue.change} isPositive={overviewMetrics.totalRevenue.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="revenue" sparklineData={overviewSparklineData.totalRevenue} granularity={granularity} previousValue={overviewMetrics.totalRevenue.previousValue} previousPeriod={overviewMetrics.totalRevenue.previousPeriod} />
+              <MetricCard title="Average Order Value" value={formatCurrency(overviewMetrics.averageOrderValue.value)} change={overviewMetrics.averageOrderValue.change} isPositive={overviewMetrics.averageOrderValue.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="avgOrderValue" sparklineData={overviewSparklineData.averageOrderValue} granularity={granularity} previousValue={overviewMetrics.averageOrderValue.previousValue} previousPeriod={overviewMetrics.averageOrderValue.previousPeriod} />
+              <MetricCard title="Revenue per Email" value={formatCurrency(overviewMetrics.revenuePerEmail.value)} change={overviewMetrics.revenuePerEmail.change} isPositive={overviewMetrics.revenuePerEmail.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="revenuePerEmail" sparklineData={overviewSparklineData.revenuePerEmail} granularity={granularity} previousValue={overviewMetrics.revenuePerEmail.previousValue} previousPeriod={overviewMetrics.revenuePerEmail.previousPeriod} />
+              <MetricCard title="Open Rate" value={formatPercent(overviewMetrics.openRate.value)} change={overviewMetrics.openRate.change} isPositive={overviewMetrics.openRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="openRate" sparklineData={overviewSparklineData.openRate} granularity={granularity} previousValue={overviewMetrics.openRate.previousValue} previousPeriod={overviewMetrics.openRate.previousPeriod} />
+              <MetricCard title="Click Rate" value={formatPercent(overviewMetrics.clickRate.value)} change={overviewMetrics.clickRate.change} isPositive={overviewMetrics.clickRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="clickRate" sparklineData={overviewSparklineData.clickRate} granularity={granularity} previousValue={overviewMetrics.clickRate.previousValue} previousPeriod={overviewMetrics.clickRate.previousPeriod} />
+              <MetricCard title="Click-to-Open Rate" value={formatPercent(overviewMetrics.clickToOpenRate.value)} change={overviewMetrics.clickToOpenRate.change} isPositive={overviewMetrics.clickToOpenRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="clickToOpenRate" sparklineData={overviewSparklineData.clickToOpenRate} granularity={granularity} previousValue={overviewMetrics.clickToOpenRate.previousValue} previousPeriod={overviewMetrics.clickToOpenRate.previousPeriod} />
+              <MetricCard title="Emails Sent" value={formatNumber(overviewMetrics.emailsSent.value)} change={overviewMetrics.emailsSent.change} isPositive={overviewMetrics.emailsSent.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="emailsSent" sparklineData={overviewSparklineData.emailsSent} granularity={granularity} previousValue={overviewMetrics.emailsSent.previousValue} previousPeriod={overviewMetrics.emailsSent.previousPeriod} />
+              <MetricCard title="Total Orders" value={formatNumber(overviewMetrics.totalOrders.value)} change={overviewMetrics.totalOrders.change} isPositive={overviewMetrics.totalOrders.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="totalOrders" sparklineData={overviewSparklineData.totalOrders} granularity={granularity} previousValue={overviewMetrics.totalOrders.previousValue} previousPeriod={overviewMetrics.totalOrders.previousPeriod} />
+              <MetricCard title="Conversion Rate" value={formatPercent(overviewMetrics.conversionRate.value)} change={overviewMetrics.conversionRate.change} isPositive={overviewMetrics.conversionRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="conversionRate" sparklineData={overviewSparklineData.conversionRate} granularity={granularity} previousValue={overviewMetrics.conversionRate.previousValue} previousPeriod={overviewMetrics.conversionRate.previousPeriod} />
+              <MetricCard title="Unsubscribe Rate" value={formatPercent(overviewMetrics.unsubscribeRate.value)} change={overviewMetrics.unsubscribeRate.change} isPositive={overviewMetrics.unsubscribeRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="unsubscribeRate" isNegativeMetric sparklineData={overviewSparklineData.unsubscribeRate} granularity={granularity} previousValue={overviewMetrics.unsubscribeRate.previousValue} previousPeriod={overviewMetrics.unsubscribeRate.previousPeriod} />
+              <MetricCard title="Spam Rate" value={formatPercent(overviewMetrics.spamRate.value)} change={overviewMetrics.spamRate.change} isPositive={overviewMetrics.spamRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="spamRate" isNegativeMetric sparklineData={overviewSparklineData.spamRate} granularity={granularity} previousValue={overviewMetrics.spamRate.previousValue} previousPeriod={overviewMetrics.spamRate.previousPeriod} />
+              <MetricCard title="Bounce Rate" value={formatPercent(overviewMetrics.bounceRate.value)} change={overviewMetrics.bounceRate.change} isPositive={overviewMetrics.bounceRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="bounceRate" isNegativeMetric sparklineData={overviewSparklineData.bounceRate} granularity={granularity} previousValue={overviewMetrics.bounceRate.previousValue} previousPeriod={overviewMetrics.bounceRate.previousPeriod} />
             </div>
           </section>
 
@@ -720,18 +632,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
               </h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              <MetricCard title="Total Revenue" value={formatCurrency(campaignMetrics.totalRevenue.value)} change={campaignMetrics.totalRevenue.change} isPositive={campaignMetrics.totalRevenue.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} sparklineData={campaignSparklineData.totalRevenue} />
-              <MetricCard title="Average Order Value" value={formatCurrency(campaignMetrics.averageOrderValue.value)} change={campaignMetrics.averageOrderValue.change} isPositive={campaignMetrics.averageOrderValue.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} sparklineData={campaignSparklineData.averageOrderValue} />
-              <MetricCard title="Revenue per Email" value={formatCurrency(campaignMetrics.revenuePerEmail.value)} change={campaignMetrics.revenuePerEmail.change} isPositive={campaignMetrics.revenuePerEmail.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="revenuePerEmail" sparklineData={campaignSparklineData.revenuePerEmail} />
-              <MetricCard title="Open Rate" value={formatPercent(campaignMetrics.openRate.value)} change={campaignMetrics.openRate.change} isPositive={campaignMetrics.openRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="openRate" sparklineData={campaignSparklineData.openRate} />
-              <MetricCard title="Click Rate" value={formatPercent(campaignMetrics.clickRate.value)} change={campaignMetrics.clickRate.change} isPositive={campaignMetrics.clickRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="clickRate" sparklineData={campaignSparklineData.clickRate} />
-              <MetricCard title="Click-to-Open Rate" value={formatPercent(campaignMetrics.clickToOpenRate.value)} change={campaignMetrics.clickToOpenRate.change} isPositive={campaignMetrics.clickToOpenRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="clickToOpenRate" sparklineData={campaignSparklineData.clickToOpenRate} />
-              <MetricCard title="Emails Sent" value={formatNumber(campaignMetrics.emailsSent.value)} change={campaignMetrics.emailsSent.change} isPositive={campaignMetrics.emailsSent.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} sparklineData={campaignSparklineData.emailsSent} />
-              <MetricCard title="Total Orders" value={formatNumber(campaignMetrics.totalOrders.value)} change={campaignMetrics.totalOrders.change} isPositive={campaignMetrics.totalOrders.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} sparklineData={campaignSparklineData.totalOrders} />
-              <MetricCard title="Conversion Rate" value={formatPercent(campaignMetrics.conversionRate.value)} change={campaignMetrics.conversionRate.change} isPositive={campaignMetrics.conversionRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="conversionRate" sparklineData={campaignSparklineData.conversionRate} />
-              <MetricCard title="Unsubscribe Rate" value={formatPercent(campaignMetrics.unsubscribeRate.value)} change={campaignMetrics.unsubscribeRate.change} isPositive={campaignMetrics.unsubscribeRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="unsubscribeRate" isNegativeMetric sparklineData={campaignSparklineData.unsubscribeRate} />
-              <MetricCard title="Spam Rate" value={formatPercent(campaignMetrics.spamRate.value)} change={campaignMetrics.spamRate.change} isPositive={campaignMetrics.spamRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="spamRate" isNegativeMetric sparklineData={campaignSparklineData.spamRate} />
-              <MetricCard title="Bounce Rate" value={formatPercent(campaignMetrics.bounceRate.value)} change={campaignMetrics.bounceRate.change} isPositive={campaignMetrics.bounceRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="bounceRate" isNegativeMetric sparklineData={campaignSparklineData.bounceRate} />
+              <MetricCard title="Total Revenue" value={formatCurrency(campaignMetrics.totalRevenue.value)} change={campaignMetrics.totalRevenue.change} isPositive={campaignMetrics.totalRevenue.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="revenue" sparklineData={campaignSparklineData.totalRevenue} granularity={granularity} previousValue={campaignMetrics.totalRevenue.previousValue} previousPeriod={campaignMetrics.totalRevenue.previousPeriod} />
+              <MetricCard title="Average Order Value" value={formatCurrency(campaignMetrics.averageOrderValue.value)} change={campaignMetrics.averageOrderValue.change} isPositive={campaignMetrics.averageOrderValue.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="avgOrderValue" sparklineData={campaignSparklineData.averageOrderValue} granularity={granularity} previousValue={campaignMetrics.averageOrderValue.previousValue} previousPeriod={campaignMetrics.averageOrderValue.previousPeriod} />
+              <MetricCard title="Revenue per Email" value={formatCurrency(campaignMetrics.revenuePerEmail.value)} change={campaignMetrics.revenuePerEmail.change} isPositive={campaignMetrics.revenuePerEmail.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="revenuePerEmail" sparklineData={campaignSparklineData.revenuePerEmail} granularity={granularity} previousValue={campaignMetrics.revenuePerEmail.previousValue} previousPeriod={campaignMetrics.revenuePerEmail.previousPeriod} />
+              <MetricCard title="Open Rate" value={formatPercent(campaignMetrics.openRate.value)} change={campaignMetrics.openRate.change} isPositive={campaignMetrics.openRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="openRate" sparklineData={campaignSparklineData.openRate} granularity={granularity} previousValue={campaignMetrics.openRate.previousValue} previousPeriod={campaignMetrics.openRate.previousPeriod} />
+              <MetricCard title="Click Rate" value={formatPercent(campaignMetrics.clickRate.value)} change={campaignMetrics.clickRate.change} isPositive={campaignMetrics.clickRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="clickRate" sparklineData={campaignSparklineData.clickRate} granularity={granularity} previousValue={campaignMetrics.clickRate.previousValue} previousPeriod={campaignMetrics.clickRate.previousPeriod} />
+              <MetricCard title="Click-to-Open Rate" value={formatPercent(campaignMetrics.clickToOpenRate.value)} change={campaignMetrics.clickToOpenRate.change} isPositive={campaignMetrics.clickToOpenRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="clickToOpenRate" sparklineData={campaignSparklineData.clickToOpenRate} granularity={granularity} previousValue={campaignMetrics.clickToOpenRate.previousValue} previousPeriod={campaignMetrics.clickToOpenRate.previousPeriod} />
+              <MetricCard title="Emails Sent" value={formatNumber(campaignMetrics.emailsSent.value)} change={campaignMetrics.emailsSent.change} isPositive={campaignMetrics.emailsSent.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="emailsSent" sparklineData={campaignSparklineData.emailsSent} granularity={granularity} previousValue={campaignMetrics.emailsSent.previousValue} previousPeriod={campaignMetrics.emailsSent.previousPeriod} />
+              <MetricCard title="Total Orders" value={formatNumber(campaignMetrics.totalOrders.value)} change={campaignMetrics.totalOrders.change} isPositive={campaignMetrics.totalOrders.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="totalOrders" sparklineData={campaignSparklineData.totalOrders} granularity={granularity} previousValue={campaignMetrics.totalOrders.previousValue} previousPeriod={campaignMetrics.totalOrders.previousPeriod} />
+              <MetricCard title="Conversion Rate" value={formatPercent(campaignMetrics.conversionRate.value)} change={campaignMetrics.conversionRate.change} isPositive={campaignMetrics.conversionRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="conversionRate" sparklineData={campaignSparklineData.conversionRate} granularity={granularity} previousValue={campaignMetrics.conversionRate.previousValue} previousPeriod={campaignMetrics.conversionRate.previousPeriod} />
+              <MetricCard title="Unsubscribe Rate" value={formatPercent(campaignMetrics.unsubscribeRate.value)} change={campaignMetrics.unsubscribeRate.change} isPositive={campaignMetrics.unsubscribeRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="unsubscribeRate" isNegativeMetric sparklineData={campaignSparklineData.unsubscribeRate} granularity={granularity} previousValue={campaignMetrics.unsubscribeRate.previousValue} previousPeriod={campaignMetrics.unsubscribeRate.previousPeriod} />
+              <MetricCard title="Spam Rate" value={formatPercent(campaignMetrics.spamRate.value)} change={campaignMetrics.spamRate.change} isPositive={campaignMetrics.spamRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="spamRate" isNegativeMetric sparklineData={campaignSparklineData.spamRate} granularity={granularity} previousValue={campaignMetrics.spamRate.previousValue} previousPeriod={campaignMetrics.spamRate.previousPeriod} />
+              <MetricCard title="Bounce Rate" value={formatPercent(campaignMetrics.bounceRate.value)} change={campaignMetrics.bounceRate.change} isPositive={campaignMetrics.bounceRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="bounceRate" isNegativeMetric sparklineData={campaignSparklineData.bounceRate} granularity={granularity} previousValue={campaignMetrics.bounceRate.previousValue} previousPeriod={campaignMetrics.bounceRate.previousPeriod} />
             </div>
 
             {/* Day of Week Performance */}
@@ -852,35 +764,42 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
                   Flow Performance
                 </h2>
               </div>
-              <select
-                value={selectedFlow}
-                onChange={(e) => setSelectedFlow(e.target.value)}
-                className={`px-3 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'} focus:ring-2 focus:ring-purple-500 focus:border-transparent`}
-              >
-                <option value="all">All Flows</option>
-                {uniqueFlowNames.map(flow => (
-                  <option key={flow} value={flow}>{flow}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={selectedFlow}
+                  onChange={(e) => setSelectedFlow(e.target.value)}
+                  className={`
+                    appearance-none px-4 py-2 pr-8 rounded-lg border cursor-pointer
+                    ${isDarkMode ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}
+                    focus:ring-2 focus:ring-purple-500 focus:border-transparent
+                  `}
+                >
+                  <option value="all">All Flows</option>
+                  {uniqueFlowNames.map(flow => (
+                    <option key={flow} value={flow}>{flow}</option>
+                  ))}
+                </select>
+                <ChevronDown className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              <MetricCard title="Total Revenue" value={formatCurrency(flowMetrics.totalRevenue.value)} change={flowMetrics.totalRevenue.change} isPositive={flowMetrics.totalRevenue.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} sparklineData={flowSparklineData.totalRevenue} />
-              <MetricCard title="Average Order Value" value={formatCurrency(flowMetrics.averageOrderValue.value)} change={flowMetrics.averageOrderValue.change} isPositive={flowMetrics.averageOrderValue.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} sparklineData={flowSparklineData.averageOrderValue} />
-              <MetricCard title="Revenue per Email" value={formatCurrency(flowMetrics.revenuePerEmail.value)} change={flowMetrics.revenuePerEmail.change} isPositive={flowMetrics.revenuePerEmail.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="revenuePerEmail" sparklineData={flowSparklineData.revenuePerEmail} />
-              <MetricCard title="Open Rate" value={formatPercent(flowMetrics.openRate.value)} change={flowMetrics.openRate.change} isPositive={flowMetrics.openRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="openRate" sparklineData={flowSparklineData.openRate} />
-              <MetricCard title="Click Rate" value={formatPercent(flowMetrics.clickRate.value)} change={flowMetrics.clickRate.change} isPositive={flowMetrics.clickRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="clickRate" sparklineData={flowSparklineData.clickRate} />
-              <MetricCard title="Click-to-Open Rate" value={formatPercent(flowMetrics.clickToOpenRate.value)} change={flowMetrics.clickToOpenRate.change} isPositive={flowMetrics.clickToOpenRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="clickToOpenRate" sparklineData={flowSparklineData.clickToOpenRate} />
-              <MetricCard title="Emails Sent" value={formatNumber(flowMetrics.emailsSent.value)} change={flowMetrics.emailsSent.change} isPositive={flowMetrics.emailsSent.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} sparklineData={flowSparklineData.emailsSent} />
-              <MetricCard title="Total Orders" value={formatNumber(flowMetrics.totalOrders.value)} change={flowMetrics.totalOrders.change} isPositive={flowMetrics.totalOrders.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} sparklineData={flowSparklineData.totalOrders} />
-              <MetricCard title="Conversion Rate" value={formatPercent(flowMetrics.conversionRate.value)} change={flowMetrics.conversionRate.change} isPositive={flowMetrics.conversionRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="conversionRate" sparklineData={flowSparklineData.conversionRate} />
-              <MetricCard title="Unsubscribe Rate" value={formatPercent(flowMetrics.unsubscribeRate.value)} change={flowMetrics.unsubscribeRate.change} isPositive={flowMetrics.unsubscribeRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="unsubscribeRate" isNegativeMetric sparklineData={flowSparklineData.unsubscribeRate} />
-              <MetricCard title="Spam Rate" value={formatPercent(flowMetrics.spamRate.value)} change={flowMetrics.spamRate.change} isPositive={flowMetrics.spamRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="spamRate" isNegativeMetric sparklineData={flowSparklineData.spamRate} />
-              <MetricCard title="Bounce Rate" value={formatPercent(flowMetrics.bounceRate.value)} change={flowMetrics.bounceRate.change} isPositive={flowMetrics.bounceRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="bounceRate" isNegativeMetric sparklineData={flowSparklineData.bounceRate} />
+              <MetricCard title="Total Revenue" value={formatCurrency(flowMetrics.totalRevenue.value)} change={flowMetrics.totalRevenue.change} isPositive={flowMetrics.totalRevenue.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="revenue" sparklineData={flowSparklineData.totalRevenue} granularity={granularity} previousValue={flowMetrics.totalRevenue.previousValue} previousPeriod={flowMetrics.totalRevenue.previousPeriod} />
+              <MetricCard title="Average Order Value" value={formatCurrency(flowMetrics.averageOrderValue.value)} change={flowMetrics.averageOrderValue.change} isPositive={flowMetrics.averageOrderValue.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="avgOrderValue" sparklineData={flowSparklineData.averageOrderValue} granularity={granularity} previousValue={flowMetrics.averageOrderValue.previousValue} previousPeriod={flowMetrics.averageOrderValue.previousPeriod} />
+              <MetricCard title="Revenue per Email" value={formatCurrency(flowMetrics.revenuePerEmail.value)} change={flowMetrics.revenuePerEmail.change} isPositive={flowMetrics.revenuePerEmail.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="revenuePerEmail" sparklineData={flowSparklineData.revenuePerEmail} granularity={granularity} previousValue={flowMetrics.revenuePerEmail.previousValue} previousPeriod={flowMetrics.revenuePerEmail.previousPeriod} />
+              <MetricCard title="Open Rate" value={formatPercent(flowMetrics.openRate.value)} change={flowMetrics.openRate.change} isPositive={flowMetrics.openRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="openRate" sparklineData={flowSparklineData.openRate} granularity={granularity} previousValue={flowMetrics.openRate.previousValue} previousPeriod={flowMetrics.openRate.previousPeriod} />
+              <MetricCard title="Click Rate" value={formatPercent(flowMetrics.clickRate.value)} change={flowMetrics.clickRate.change} isPositive={flowMetrics.clickRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="clickRate" sparklineData={flowSparklineData.clickRate} granularity={granularity} previousValue={flowMetrics.clickRate.previousValue} previousPeriod={flowMetrics.clickRate.previousPeriod} />
+              <MetricCard title="Click-to-Open Rate" value={formatPercent(flowMetrics.clickToOpenRate.value)} change={flowMetrics.clickToOpenRate.change} isPositive={flowMetrics.clickToOpenRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="clickToOpenRate" sparklineData={flowSparklineData.clickToOpenRate} granularity={granularity} previousValue={flowMetrics.clickToOpenRate.previousValue} previousPeriod={flowMetrics.clickToOpenRate.previousPeriod} />
+              <MetricCard title="Emails Sent" value={formatNumber(flowMetrics.emailsSent.value)} change={flowMetrics.emailsSent.change} isPositive={flowMetrics.emailsSent.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="emailsSent" sparklineData={flowSparklineData.emailsSent} granularity={granularity} previousValue={flowMetrics.emailsSent.previousValue} previousPeriod={flowMetrics.emailsSent.previousPeriod} />
+              <MetricCard title="Total Orders" value={formatNumber(flowMetrics.totalOrders.value)} change={flowMetrics.totalOrders.change} isPositive={flowMetrics.totalOrders.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="totalOrders" sparklineData={flowSparklineData.totalOrders} granularity={granularity} previousValue={flowMetrics.totalOrders.previousValue} previousPeriod={flowMetrics.totalOrders.previousPeriod} />
+              <MetricCard title="Conversion Rate" value={formatPercent(flowMetrics.conversionRate.value)} change={flowMetrics.conversionRate.change} isPositive={flowMetrics.conversionRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="conversionRate" sparklineData={flowSparklineData.conversionRate} granularity={granularity} previousValue={flowMetrics.conversionRate.previousValue} previousPeriod={flowMetrics.conversionRate.previousPeriod} />
+              <MetricCard title="Unsubscribe Rate" value={formatPercent(flowMetrics.unsubscribeRate.value)} change={flowMetrics.unsubscribeRate.change} isPositive={flowMetrics.unsubscribeRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="unsubscribeRate" isNegativeMetric sparklineData={flowSparklineData.unsubscribeRate} granularity={granularity} previousValue={flowMetrics.unsubscribeRate.previousValue} previousPeriod={flowMetrics.unsubscribeRate.previousPeriod} />
+              <MetricCard title="Spam Rate" value={formatPercent(flowMetrics.spamRate.value)} change={flowMetrics.spamRate.change} isPositive={flowMetrics.spamRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="spamRate" isNegativeMetric sparklineData={flowSparklineData.spamRate} granularity={granularity} previousValue={flowMetrics.spamRate.previousValue} previousPeriod={flowMetrics.spamRate.previousPeriod} />
+              <MetricCard title="Bounce Rate" value={formatPercent(flowMetrics.bounceRate.value)} change={flowMetrics.bounceRate.change} isPositive={flowMetrics.bounceRate.isPositive} isDarkMode={isDarkMode} dateRange={dateRange} metricKey="bounceRate" isNegativeMetric sparklineData={flowSparklineData.bounceRate} granularity={granularity} previousValue={flowMetrics.bounceRate.previousValue} previousPeriod={flowMetrics.bounceRate.previousPeriod} />
             </div>
           </section>
 
           {/* Flow Step Analysis - NEW SECTION */}
-          <FlowStepAnalysis isDarkMode={isDarkMode} dateRange={dateRange} />
+          <FlowStepAnalysis isDarkMode={isDarkMode} dateRange={dateRange} granularity={granularity} />
 
           {/* Audience Overview */}
           <div ref={audienceOverviewRef}>
@@ -888,78 +807,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onUploadNew, isDarkMode }) => {
             {/* Analyze Custom Segment - match dashboard container style and dark mode */}
             <CustomSegmentBlock isDarkMode={isDarkMode} />
           </div>
-
-          {/* AI Email Insights */}
-      <section id="ai-email-insights" className="scroll-mt-20">
-        <div className="max-w-7xl mx-auto">
-          {/* Icon and Title - outside the container */}
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-700 rounded-2xl flex items-center justify-center shadow-lg">
-              <Brain className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>AI Email Insights</h2>
-              <p className={`text-sm ${isDarkMode ? 'text-purple-300' : 'text-purple-600'} mt-1`}>Advanced analytics powered by artificial intelligence</p>
-            </div>
-          </div>
-
-          {/* Match other containers: consistent styling with other sections */}
-          <div
-            className={`${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'} rounded-2xl ${aiAnalysisStarted ? 'p-0' : 'p-8'} mb-8 hover:shadow-xl transition-all duration-200`}
-            style={{
-              boxShadow: isDarkMode 
-                ? '0 0 20px rgba(147, 51, 234, 0.3), 0 0 40px rgba(147, 51, 234, 0.1)' 
-                : '0 0 20px rgba(147, 51, 234, 0.2), 0 0 40px rgba(147, 51, 234, 0.05)'
-            }}
-          >
-            {/* Description and CTA Button - hide when AI analysis section is shown */}
-            {!aiAnalysisStarted && (
-              <>
-                <p className={`
-                  text-lg leading-relaxed mb-6 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}
-                `}>
-                  Transform your Klaviyo email data into actionable business intelligence. Our AI analyzes patterns across all your campaigns, flows, and subscriber segments to identify opportunities that would be impossible to spot manually.
-                </p>
-
-                {/* CTA Button */}
-                <div className="flex justify-center">
-                  <button
-                    onClick={() => {
-                      setShowAIAnalysis(true);
-                      setAiAnalysisStarted(true);
-                      setLoadingAI(false);
-                    }}
-                    className="group relative px-8 py-4 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Brain className="w-5 h-5" />
-                      <span className="text-lg">Start AI Analysis</span>
-                      <ChevronRight className={`w-5 h-5 transition-transform duration-300 ${showAIAnalysis ? 'rotate-90' : 'group-hover:translate-x-1'}`} />
-                    </div>
-                    <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-600 to-purple-700 blur-xl opacity-0 group-hover:opacity-30 transition-opacity duration-300 -z-10" />
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* AI Analysis Report Section */}
-            {aiAnalysisStarted && (
-                <AIReportTemplate isDarkMode={isDarkMode} />
-            )}
-          </div>
-        </div>
-      </section>
         </div>
       </div>
-
-      {/* Insights Modal */}
-      <InsightsModal
-        isOpen={showInsightsModal}
-        onClose={() => setShowInsightsModal(false)}
-        insights={insightsData}
-        isDarkMode={isDarkMode}
-        isLoading={isGeneratingInsights}
-      />
     </div>
   );
 };

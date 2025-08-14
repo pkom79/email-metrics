@@ -69,6 +69,8 @@ export interface ProcessedSubscriber {
     zipCode: string;
     source: string;
     emailConsent: boolean;
+    // Preserve raw consent to compute opt-in rate rules like NEVER_SUBSCRIBED
+    emailConsentRaw?: string;
     totalClv: number;
     predictedClv: number;
     avgOrderValue: number;
@@ -78,6 +80,14 @@ export interface ProcessedSubscriber {
     profileCreated: Date;
     isBuyer: boolean;
     lifetimeInDays: number;
+    // New fields from CSV for segment analysis
+    emailSuppressions?: string[]; // e.g., ["UNSUBSCRIBE", "SPAM_COMPLAINT"]
+    canReceiveEmail?: boolean; // strictly true when raw suppressions string is exactly "[]"
+    avgDaysBetweenOrders?: number | null; // null when missing
+    // New activity fields
+    lastOpen?: Date | null;
+    lastClick?: Date | null;
+    firstActiveRaw?: Date | null;
 }
 
 // ============================================
@@ -162,7 +172,7 @@ export interface RawSubscriberCSV {
     'Longitude'?: string | number;
     'Source': string;
     'IP Address'?: string;
-    'Email Marketing Consent': string; // "TRUE", "FALSE", or timestamp
+    'Email Marketing Consent': string; // "TRUE", "FALSE", timestamp, or "NEVER_SUBSCRIBED"
     'Email Marketing Consent Timestamp'?: string;
     'Total Customer Lifetime Value'?: string | number;
     'Predicted Customer Lifetime Value'?: string | number;
@@ -174,6 +184,9 @@ export interface RawSubscriberCSV {
     'Date Added': string; // Date string
     'Last Open'?: string; // Date string
     'Last Click'?: string; // Date string
+    // New fields used in Custom Segment analysis
+    'Average Days Between Orders'?: string | number;
+    'Email Suppressions'?: string; // e.g., "[]" or "[UNSUBSCRIBE,SPAM_COMPLAINT]"
     // Additional fields that might exist
     [key: string]: string | number | undefined;
 }

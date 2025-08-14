@@ -30,26 +30,25 @@ export class FlowTransformer {
      * Build a map of flow message sequences
      */
     private buildSequenceMap(flows: RawFlowCSV[]): Map<string, number> {
-        const sequenceMap = new Map<string, number>();
-        const flowSequences = new Map<string, Set<string>>();
+        // Determine order by earliest observed send date per (flowId, messageId)
+        const earliestByFlow = new Map<string, Map<string, number>>();
 
-        // Group by flow ID and track unique message IDs in order of first appearance
         flows.forEach(flow => {
             const flowId = flow['Flow ID'];
             const messageId = flow['Flow Message ID'];
-
-            if (!flowSequences.has(flowId)) {
-                flowSequences.set(flowId, new Set());
-            }
-
-            // Add message ID to the set (preserves insertion order)
-            flowSequences.get(flowId)!.add(messageId);
+            const ts = this.parseDate(flow['Day']).getTime();
+            if (!earliestByFlow.has(flowId)) earliestByFlow.set(flowId, new Map());
+            const inner = earliestByFlow.get(flowId)!;
+            const prev = inner.get(messageId);
+            if (prev === undefined || ts < prev) inner.set(messageId, ts);
         });
 
-        // Assign sequence positions
-        flowSequences.forEach((messageIds, flowId) => {
-            const messageArray = Array.from(messageIds);
-            messageArray.forEach((messageId, index) => {
+        const sequenceMap = new Map<string, number>();
+        earliestByFlow.forEach((msgMap, flowId) => {
+            const orderedIds = Array.from(msgMap.entries())
+                .sort((a, b) => a[1] - b[1])
+                .map(([messageId]) => messageId);
+            orderedIds.forEach((messageId, index) => {
                 sequenceMap.set(`${flowId}_${messageId}`, index + 1);
             });
         });
@@ -191,27 +190,32 @@ export class FlowTransformer {
             return { flowId: '', messageIds: [], emailNames: [], sequenceLength: 0 };
         }
 
-        // Get unique sequence positions
-        const sequenceMap = new Map<number, { messageId: string; emailName: string }>();
+        // Group by messageId to compute stable order and latest name
+        const byMessageId = new Map<string, { seq: number; earliestSeq: number; latestTs: number; latestName: string }>();
 
         flowEmails.forEach(email => {
-            if (!sequenceMap.has(email.sequencePosition)) {
-                sequenceMap.set(email.sequencePosition, {
-                    messageId: email.flowMessageId,
-                    emailName: email.emailName
-                });
+            const key = email.flowMessageId;
+            const ts = email.sentDate.getTime();
+            if (!byMessageId.has(key)) {
+                byMessageId.set(key, { seq: email.sequencePosition, earliestSeq: email.sequencePosition, latestTs: ts, latestName: email.emailName });
+            } else {
+                const cur = byMessageId.get(key)!;
+                if (email.sequencePosition < cur.earliestSeq) cur.earliestSeq = email.sequencePosition;
+                if (ts > cur.latestTs) {
+                    cur.latestTs = ts;
+                    cur.latestName = email.emailName;
+                }
             }
         });
 
-        // Sort by sequence position
-        const sortedSequence = Array.from(sequenceMap.entries())
-            .sort((a, b) => a[0] - b[0]);
+        const ordered = Array.from(byMessageId.entries())
+            .sort((a, b) => a[1].earliestSeq - b[1].earliestSeq);
 
         return {
             flowId: flowEmails[0].flowId,
-            messageIds: sortedSequence.map(([_, data]) => data.messageId),
-            emailNames: sortedSequence.map(([_, data]) => data.emailName),
-            sequenceLength: sortedSequence.length
+            messageIds: ordered.map(([id]) => id),
+            emailNames: ordered.map(([_, v]) => v.latestName),
+            sequenceLength: ordered.length
         };
     }
 

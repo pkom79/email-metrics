@@ -214,9 +214,13 @@ export class DataManager {
         const campaignDates = this.campaigns.map(c => c.sentDate);
         const flowDates = this.flowEmails.map(f => f.sentDate);
         const allDates = [...campaignDates, ...flowDates];
-        return allDates.length > 0
-            ? new Date(Math.max(...allDates.map(d => d.getTime())))
-            : new Date();
+        if (allDates.length === 0) return new Date();
+        let maxTs = -Infinity;
+        for (const d of allDates) {
+            const ts = d.getTime();
+            if (ts > maxTs) maxTs = ts;
+        }
+        return new Date(maxTs);
     }
 
     /**
@@ -235,13 +239,23 @@ export class DataManager {
             return [];
         }
 
-        // Determine date range
-        const endDate = new Date();
+        // Determine end at last email activity among provided emails
+        let endTs = -Infinity;
+        for (const e of allEmails) {
+            const ts = e.sentDate.getTime();
+            if (ts > endTs) endTs = ts;
+        }
+        const endDate = new Date(isFinite(endTs) ? endTs : Date.now());
         let startDate = new Date(endDate);
 
         if (dateRange === 'all') {
-            const oldestDate = Math.min(...allEmails.map(e => e.sentDate.getTime()));
-            startDate = new Date(oldestDate);
+            // Avoid spread with very large arrays; compute oldest iteratively
+            let oldestTs = Infinity;
+            for (const e of allEmails) {
+                const ts = e.sentDate.getTime();
+                if (ts < oldestTs) oldestTs = ts;
+            }
+            startDate = new Date(isFinite(oldestTs) ? oldestTs : endDate.getTime());
         } else {
             const days = parseInt(dateRange.replace('d', ''));
             startDate.setDate(startDate.getDate() - days);
@@ -253,21 +267,59 @@ export class DataManager {
         );
 
         if (filteredEmails.length === 0) {
-            return [];
+            // Even if no emails in range, still return seeded zero-buckets for visuals
+            // handled below after seeding
         }
 
         // Create time buckets based on granularity
         const buckets = new Map<string, typeof allEmails>();
 
+        // Seed empty buckets across the full range so missing periods appear as 0s
+        {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            start.setHours(0, 0, 0, 0);
+            end.setHours(0, 0, 0, 0);
+
+            if (granularity === 'daily') {
+                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                    const key = d.toISOString().split('T')[0];
+                    if (!buckets.has(key)) buckets.set(key, []);
+                }
+            } else if (granularity === 'weekly') {
+                const mondayOf = (dt: Date) => {
+                    const d = new Date(dt);
+                    const day = d.getDay();
+                    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                    d.setDate(diff);
+                    d.setHours(0, 0, 0, 0);
+                    return d;
+                };
+                const w = mondayOf(start);
+                for (let d = new Date(w); d <= end; d.setDate(d.getDate() + 7)) {
+                    const key = d.toISOString().split('T')[0];
+                    if (!buckets.has(key)) buckets.set(key, []);
+                }
+            } else { // monthly
+                const m = new Date(start.getFullYear(), start.getMonth(), 1);
+                for (let d = new Date(m); d <= end; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+                    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                    if (!buckets.has(key)) buckets.set(key, []);
+                }
+            }
+        }
+
+        // Place emails into their respective buckets
         filteredEmails.forEach(email => {
             let bucketKey: string;
             const date = new Date(email.sentDate);
 
             switch (granularity) {
-                case 'daily':
+                case 'daily': {
                     bucketKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
                     break;
-                case 'weekly':
+                }
+                case 'weekly': {
                     // Get Monday of the week
                     const monday = new Date(date);
                     const day = monday.getDay();
@@ -275,9 +327,11 @@ export class DataManager {
                     monday.setDate(diff);
                     bucketKey = monday.toISOString().split('T')[0];
                     break;
-                case 'monthly':
+                }
+                case 'monthly': {
                     bucketKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                     break;
+                }
             }
 
             if (!buckets.has(bucketKey)) {
@@ -352,16 +406,19 @@ export class DataManager {
             // Format date for display
             let displayDate: string;
             switch (granularity) {
-                case 'daily':
+                case 'daily': {
                     displayDate = new Date(bucketKey).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                     break;
-                case 'weekly':
+                }
+                case 'weekly': {
                     displayDate = new Date(bucketKey).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                     break;
-                case 'monthly':
+                }
+                case 'monthly': {
                     const [year, month] = bucketKey.split('-');
                     displayDate = new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
                     break;
+                }
             }
 
             timeSeriesData.push({ value, date: displayDate });
@@ -621,15 +678,30 @@ export class DataManager {
         // We want approximately 20-30 data points for clean, readable charts
 
         if (dateRange === 'all') {
-            // For "all time", determine based on total date range
-            const oldestCampaign = this.campaigns.length > 0
-                ? Math.min(...this.campaigns.map(c => c.sentDate.getTime()))
-                : Date.now();
-            const oldestFlow = this.flowEmails.length > 0
-                ? Math.min(...this.flowEmails.map(f => f.sentDate.getTime()))
-                : Date.now();
-            const oldestDate = new Date(Math.min(oldestCampaign, oldestFlow));
-            const daysDiff = Math.floor((Date.now() - oldestDate.getTime()) / (1000 * 60 * 60 * 24));
+            // For "all time", determine based on total date range using last email date (not now)
+            let oldestCampaignTs = Date.now();
+            if (this.campaigns.length > 0) {
+                let minTs = Infinity;
+                for (const c of this.campaigns) {
+                    const ts = c.sentDate.getTime();
+                    if (ts < minTs) minTs = ts;
+                }
+                oldestCampaignTs = isFinite(minTs) ? minTs : Date.now();
+            }
+
+            let oldestFlowTs = Date.now();
+            if (this.flowEmails.length > 0) {
+                let minTs = Infinity;
+                for (const f of this.flowEmails) {
+                    const ts = f.sentDate.getTime();
+                    if (ts < minTs) minTs = ts;
+                }
+                oldestFlowTs = isFinite(minTs) ? minTs : Date.now();
+            }
+
+            const oldestDate = new Date(Math.min(oldestCampaignTs, oldestFlowTs));
+            const lastEmailDate = this.getLastEmailDate();
+            const daysDiff = Math.floor((lastEmailDate.getTime() - oldestDate.getTime()) / (1000 * 60 * 60 * 24));
 
             if (daysDiff <= 60) return 'daily';
             if (daysDiff <= 365) return 'weekly';
@@ -758,16 +830,17 @@ export class DataManager {
     calculatePeriodOverPeriodChange(
         metricKey: string,
         dateRange: string,
-        dataType: 'all' | 'campaigns' | 'flows' = 'all'
-    ): { currentValue: number; previousValue: number; changePercent: number; isPositive: boolean } {
-        // Get current period dates
-        const endDate = new Date();
-        let startDate = new Date(endDate);
+        dataType: 'all' | 'campaigns' | 'flows' = 'all',
+        options?: { flowName?: string }
+    ): { currentValue: number; previousValue: number; changePercent: number; isPositive: boolean; currentPeriod?: { startDate: Date; endDate: Date }; previousPeriod?: { startDate: Date; endDate: Date } } {
+        // Get current period dates anchored at last email activity
+        const endDate = this.getLastEmailDate();
+        const startDate = new Date(endDate);
         let periodDays = 0;
 
         if (dateRange === 'all') {
             // For "all time", we can't calculate a proper change
-            return { currentValue: 0, previousValue: 0, changePercent: 0, isPositive: true };
+            return { currentValue: 0, previousValue: 0, changePercent: 0, isPositive: true, currentPeriod: undefined, previousPeriod: undefined };
         } else {
             periodDays = parseInt(dateRange.replace('d', ''));
             startDate.setDate(startDate.getDate() - periodDays);
@@ -787,6 +860,11 @@ export class DataManager {
             flowsToUse = [];
         } else if (dataType === 'flows') {
             campaignsToUse = [];
+        }
+
+        // Optional filter by flow name when analyzing flows
+        if (options?.flowName && options.flowName !== 'all') {
+            flowsToUse = flowsToUse.filter(f => f.flowName === options.flowName);
         }
 
         // Get metrics for both periods
@@ -877,7 +955,9 @@ export class DataManager {
             currentValue,
             previousValue,
             changePercent,
-            isPositive
+            isPositive,
+            currentPeriod: { startDate, endDate },
+            previousPeriod: { startDate: prevStartDate, endDate: prevEndDate }
         };
     }
 }

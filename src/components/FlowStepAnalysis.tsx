@@ -1,10 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronDown, TrendingUp, TrendingDown, Workflow, GitBranch } from 'lucide-react';
+import { ChevronDown, Workflow, GitBranch, AlertTriangle, ArrowUp, ArrowDown } from 'lucide-react';
 import { DataManager } from '../utils/dataManager';
 
 interface FlowStepAnalysisProps {
     isDarkMode: boolean;
     dateRange: string;
+    // NEW: accept global granularity like Metric Cards
+    granularity: 'daily' | 'weekly' | 'monthly';
 }
 
 interface FlowStepMetrics {
@@ -23,11 +25,13 @@ interface FlowStepMetrics {
     spamRate: number;
     revenuePerEmail: number;
     totalOrders: number;
+    // NEW: exact clicks to compute view-through conversions
+    totalClicks: number;
 }
 
-const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRange }) => {
+const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRange, granularity }) => {
     // Tooltip state for charts
-    const [tooltip, setTooltip] = useState<{
+    const [tooltip] = useState<{
         chartIndex: number;
         x: number;
         y: number;
@@ -52,46 +56,60 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
     ];
     const [selectedFlow, setSelectedFlow] = useState<string>('');
     const [selectedMetric, setSelectedMetric] = useState('revenue');
-    // Tooltip state for charts
-    // (Removed unused tooltip state)
 
     // Get data from DataManager
     const dataManager = DataManager.getInstance();
     const ALL_FLOW_EMAILS = dataManager.getFlowEmails();
 
-    // Get unique live flow names
-    const uniqueFlowNames = useMemo(() => {
-        const liveFlows = ALL_FLOW_EMAILS.filter(email =>
-            email.status && email.status.toLowerCase() === 'live'
-        );
-        return Array.from(new Set(liveFlows.map(email => email.flowName))).sort();
+    // Helper: date-only (strip time)
+    const toDateOnly = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+    // Compute date windows for current and previous periods (anchored to last email activity)
+    const dateWindows = useMemo(() => {
+        if (dateRange === 'all') return null;
+        const days = parseInt(dateRange.replace('d', ''));
+        const endDate = toDateOnly(dataManager.getLastEmailDate());
+        const startDate = toDateOnly(new Date(endDate));
+        startDate.setDate(endDate.getDate() - days);
+        const prevEndDate = toDateOnly(new Date(startDate));
+        const prevStartDate = toDateOnly(new Date(prevEndDate));
+        prevStartDate.setDate(prevEndDate.getDate() - days);
+        return { startDateOnly: startDate, endDateOnly: endDate, prevStartDateOnly: prevStartDate, prevEndDateOnly: prevEndDate, days };
+    }, [dateRange, dataManager]);
+
+    // Live flows only
+    const liveFlowEmails = useMemo(() => {
+        return ALL_FLOW_EMAILS.filter(e => e.status && e.status.toLowerCase() === 'live');
     }, [ALL_FLOW_EMAILS]);
 
-    // Filter flow emails based on date range
-    const filteredFlowEmails = useMemo(() => {
-        let filtered = ALL_FLOW_EMAILS.filter(email =>
-            email.status && email.status.toLowerCase() === 'live'
-        );
-
-        // Filter by date range: include both current and previous periods
-        if (dateRange !== 'all') {
-            const days = parseInt(dateRange.replace('d', ''));
-            const endDate = new Date();
-            const startDate = new Date();
-            startDate.setDate(endDate.getDate() - days);
-            // Previous period
-            const prevEndDate = new Date(startDate);
-            const prevStartDate = new Date(prevEndDate);
-            prevStartDate.setDate(prevEndDate.getDate() - days);
-            // Include emails from prevStartDate to endDate (inclusive)
-            filtered = filtered.filter(email => {
-                const sent = new Date(email.sentDate);
-                return sent >= prevStartDate && sent <= endDate;
-            });
+    // Unique flow names for selector
+    const uniqueFlowNames = useMemo((): string[] => {
+        const names = new Set<string>();
+        for (const e of liveFlowEmails) {
+            if (e.flowName) names.add(e.flowName);
         }
+        return Array.from(names).sort();
+    }, [liveFlowEmails]);
 
-        return filtered;
-    }, [ALL_FLOW_EMAILS, dateRange]);
+    // Current-period emails (used for header + chart)
+    const currentFlowEmails = useMemo(() => {
+        if (!dateWindows) return liveFlowEmails; // 'all' = entire dataset
+        const { startDateOnly, endDateOnly } = dateWindows;
+        return liveFlowEmails.filter(e => {
+            const sent = toDateOnly(new Date(e.sentDate));
+            return sent >= startDateOnly && sent <= endDateOnly;
+        });
+    }, [liveFlowEmails, dateWindows]);
+
+    // Previous-period emails (used only for PoP)
+    const previousFlowEmails = useMemo(() => {
+        if (!dateWindows) return [];
+        const { prevStartDateOnly, prevEndDateOnly } = dateWindows;
+        return liveFlowEmails.filter(e => {
+            const sent = toDateOnly(new Date(e.sentDate));
+            return sent >= prevStartDateOnly && sent <= prevEndDateOnly;
+        });
+    }, [liveFlowEmails, dateWindows]);
 
     // Get flow sequence info
     const flowSequenceInfo = useMemo(() => {
@@ -99,26 +117,42 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
         return dataManager.getFlowSequenceInfo(selectedFlow);
     }, [selectedFlow]);
 
+    // Detect duplicate step names (structure-level, not time-filtered)
+    const duplicateNameCounts = useMemo((): Record<string, number> => {
+        const counts: Record<string, number> = {};
+        const names = flowSequenceInfo?.emailNames || [];
+        for (const raw of names) {
+            const name = (raw || '').trim();
+            if (!name) continue;
+            counts[name] = (counts[name] || 0) + 1;
+        }
+        return counts;
+    }, [flowSequenceInfo]);
+
+    const hasDuplicateNames = useMemo(
+        () => Object.values(duplicateNameCounts).some(c => c > 1),
+        [duplicateNameCounts]
+    );
+
     // Calculate metrics for each step in the selected flow
     const flowStepMetrics = useMemo((): FlowStepMetrics[] => {
         if (!selectedFlow || !flowSequenceInfo) return [];
 
-        const flowEmails = filteredFlowEmails.filter(email => email.flowName === selectedFlow);
+        const flowEmails = currentFlowEmails.filter(email => email.flowName === selectedFlow);
 
-        // Build metrics strictly in CSV order
         const stepMetrics: FlowStepMetrics[] = [];
         let previousEmailsSent = 0;
         flowSequenceInfo.messageIds.forEach((messageId, idx) => {
             // Get all emails for this step
             const stepEmails = flowEmails.filter(email => email.flowMessageId === messageId);
-            // Sort emails within the step by Flow Message Name
-            const sortedStepEmails = [...stepEmails].sort((a, b) => {
-                if (a.emailName < b.emailName) return -1;
-                if (a.emailName > b.emailName) return 1;
-                return 0;
-            });
-            // Aggregate metrics
-            const emailName = sortedStepEmails.length > 0 ? sortedStepEmails[0].emailName : flowSequenceInfo.emailNames[idx] || `Email ${idx + 1}`;
+            // Sort step emails by date to ensure stable metrics (name can vary)
+            const sortedStepEmails = [...stepEmails].sort((a, b) => a.sentDate.getTime() - b.sentDate.getTime());
+
+            // Use canonical latest name from sequence info for display
+            const emailName = flowSequenceInfo.emailNames[idx] || (sortedStepEmails.length > 0
+                ? sortedStepEmails[sortedStepEmails.length - 1].emailName
+                : `Email ${idx + 1}`);
+
             const totalEmailsSent = sortedStepEmails.reduce((sum, email) => sum + email.emailsSent, 0);
             const totalRevenue = sortedStepEmails.reduce((sum, email) => sum + email.revenue, 0);
             const totalOrders = sortedStepEmails.reduce((sum, email) => sum + email.totalOrders, 0);
@@ -128,7 +162,6 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
             const totalBounces = sortedStepEmails.reduce((sum, email) => sum + email.bouncesCount, 0);
             const totalSpam = sortedStepEmails.reduce((sum, email) => sum + email.spamComplaintsCount, 0);
 
-            // Calculate rates
             const openRate = totalEmailsSent > 0 ? (totalOpens / totalEmailsSent) * 100 : 0;
             const clickRate = totalEmailsSent > 0 ? (totalClicks / totalEmailsSent) * 100 : 0;
             const clickToOpenRate = totalOpens > 0 ? (totalClicks / totalOpens) * 100 : 0;
@@ -160,65 +193,20 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
                 bounceRate,
                 spamRate,
                 revenuePerEmail,
-                totalOrders
+                totalOrders,
+                totalClicks
             });
 
             previousEmailsSent = totalEmailsSent;
         });
 
         return stepMetrics;
-    }, [selectedFlow, filteredFlowEmails, flowSequenceInfo]);
+    }, [selectedFlow, currentFlowEmails, flowSequenceInfo]);
 
-    // Granularity rules
-    const getGranularityForDateRange = (dateRange: string, allTimeDays?: number) => {
-        if (dateRange === 'all') {
-            if (allTimeDays && allTimeDays > 365) return 'monthly';
-            // If less than 365 days, use rules below
-            if (allTimeDays) {
-                if (allTimeDays <= 30) return 'daily';
-                if (allTimeDays <= 60) return 'daily';
-                if (allTimeDays <= 90) return 'weekly';
-                if (allTimeDays <= 120) return 'weekly';
-                if (allTimeDays <= 180) return 'weekly';
-                if (allTimeDays <= 365) return 'monthly';
-            }
-            return 'monthly';
-        }
-        if (dateRange === '30d') return 'daily';
-        if (dateRange === '60d') return 'daily';
-        if (dateRange === '90d') return 'weekly';
-        if (dateRange === '120d') return 'weekly';
-        if (dateRange === '180d') return 'weekly';
-        if (dateRange === '365d') return 'monthly';
-        return 'daily';
-    };
-
-    // Calculate sparkline data for each step
+    // Calculate sparkline data for each step using global granularity from props
     const getStepSparklineData = (sequencePosition: number, metric: string) => {
         if (!selectedFlow) return [];
-        let granularity: 'daily' | 'weekly' | 'monthly';
-        let chartEmails = filteredFlowEmails;
-        if (dateRange !== 'all') {
-            // Only use current period emails for chart
-            const days = parseInt(dateRange.replace('d', ''));
-            const endDate = new Date();
-            const startDate = new Date();
-            startDate.setDate(endDate.getDate() - days);
-            chartEmails = filteredFlowEmails.filter(email => {
-                const sent = new Date(email.sentDate);
-                return sent >= startDate && sent <= endDate;
-            });
-        }
-        if (dateRange === 'all') {
-            if (filteredFlowEmails.length === 0) return [];
-            const dates = filteredFlowEmails.map(e => new Date(e.sentDate));
-            const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
-            const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
-            const diffDays = Math.ceil((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24));
-            granularity = getGranularityForDateRange(dateRange, diffDays) as 'daily' | 'weekly' | 'monthly';
-        } else {
-            granularity = getGranularityForDateRange(dateRange) as 'daily' | 'weekly' | 'monthly';
-        }
+        const chartEmails = currentFlowEmails; // already limited by dateRange
         return dataManager.getFlowStepTimeSeries(
             chartEmails,
             selectedFlow,
@@ -264,210 +252,99 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
             else max = Math.ceil(max);
         }
         return { min, max };
-    }, [selectedFlow, selectedMetric, flowSequenceInfo, filteredFlowEmails]);
+    }, [selectedFlow, selectedMetric, flowSequenceInfo, currentFlowEmails, granularity]);
 
-    // Calculate period-over-period change for a step
-    const getStepPeriodChange = (sequencePosition: number, metric: string): { change: number; isPositive: boolean } | null => {
+    // Calculate period-over-period change for a step, include previous value and previous period for tooltip
+    const getStepPeriodChange = (sequencePosition: number, metric: string): {
+        change: number; isPositive: boolean; previousValue: number; previousPeriod: { startDate: Date; endDate: Date }
+    } | null => {
         if (!selectedFlow || dateRange === 'all') return null;
 
-        const stepEmails = filteredFlowEmails.filter(email =>
-            email.flowName === selectedFlow && email.sequencePosition === sequencePosition
-        );
+        const currStepEmails = currentFlowEmails.filter(e => e.flowName === selectedFlow && e.sequencePosition === sequencePosition);
+        const prevStepEmails = previousFlowEmails.filter(e => e.flowName === selectedFlow && e.sequencePosition === sequencePosition);
 
-        if (stepEmails.length === 0) return null;
+        if (currStepEmails.length === 0) return null;
 
-        // Calculate current period metrics
-        const endDate = new Date();
-        let startDate = new Date();
-
-        const days = parseInt(dateRange.replace('d', ''));
-        startDate.setDate(startDate.getDate() - days);
-
-        // Calculate previous period
-        const periodLength = days;
-        const prevEndDate = new Date(startDate);
-        const prevStartDate = new Date(prevEndDate);
-        prevStartDate.setDate(prevStartDate.getDate() - periodLength);
-
-        // Filter emails by periods
-        // Use only date part for filtering, inclusive of both boundaries
-        const toDateOnly = (date: Date) => {
-            return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        };
-        const startDateOnly = toDateOnly(startDate);
-        const endDateOnly = toDateOnly(endDate);
-        const prevStartDateOnly = toDateOnly(prevStartDate);
-        const prevEndDateOnly = toDateOnly(prevEndDate);
-
-        // Current period: inclusive of start and end
-        const currentPeriodEmails = stepEmails.filter(e => {
-            const sent = toDateOnly(e.sentDate);
-            return sent >= startDateOnly && sent <= endDateOnly;
-        });
-        // Previous period: inclusive of start and end
-        const previousPeriodEmails = stepEmails.filter(e => {
-            const sent = toDateOnly(e.sentDate);
-            return sent >= prevStartDateOnly && sent <= prevEndDateOnly;
-        });
-
-        // Debug output for date ranges and counts
-        console.log('Current period:', startDateOnly, 'to', endDateOnly, 'Count:', currentPeriodEmails.length);
-        console.log('Previous period:', prevStartDateOnly, 'to', prevEndDateOnly, 'Count:', previousPeriodEmails.length);
-
-        // Debug output
-        console.log('--- getStepPeriodChange ---');
-        console.log('selectedFlow:', selectedFlow);
-        console.log('sequencePosition:', sequencePosition);
-        console.log('metric:', metric);
-        console.log('startDate:', startDate, 'endDate:', endDate);
-        console.log('prevStartDate:', prevStartDate, 'prevEndDate:', prevEndDate);
-        console.log('currentPeriodEmails:', currentPeriodEmails.length, currentPeriodEmails.map(e => e.sentDate));
-        console.log('previousPeriodEmails:', previousPeriodEmails.length, previousPeriodEmails.map(e => e.sentDate));
-
-        if (currentPeriodEmails.length === 0) {
-            console.log('No current period data available for this step/metric.');
-            return null;
-        }
-
-        if (previousPeriodEmails.length === 0) {
-            console.log('No previous period data available for this step/metric.');
-            // Show 100% change if current period has data but previous does not
-            return { change: 100, isPositive: true };
-        }
-
-        // Calculate metrics for both periods
-        const calculateMetricValue = (emails: typeof stepEmails, metricKey: string): number => {
-            const totalEmailsSent = emails.reduce((sum, e) => sum + e.emailsSent, 0);
+        const calculateMetricValue = (emails: typeof currStepEmails, metricKey: string): number => {
+            const totals = emails.reduce(
+                (acc, e) => {
+                    acc.emailsSent += e.emailsSent || 0;
+                    acc.revenue += e.revenue || 0;
+                    acc.orders += e.totalOrders || 0;
+                    acc.opens += e.uniqueOpens || 0;
+                    acc.clicks += e.uniqueClicks || 0;
+                    acc.unsubs += e.unsubscribesCount || 0;
+                    acc.bounces += e.bouncesCount || 0;
+                    acc.spam += e.spamComplaintsCount || 0;
+                    return acc;
+                },
+                { emailsSent: 0, revenue: 0, orders: 0, opens: 0, clicks: 0, unsubs: 0, bounces: 0, spam: 0 }
+            );
 
             switch (metricKey) {
-                case 'revenue':
-                    return emails.reduce((sum, e) => sum + e.revenue, 0);
-                case 'openRate':
-                    const totalOpens = emails.reduce((sum, e) => sum + e.uniqueOpens, 0);
-                    return totalEmailsSent > 0 ? (totalOpens / totalEmailsSent) * 100 : 0;
-                case 'clickRate':
-                    const totalClicks = emails.reduce((sum, e) => sum + e.uniqueClicks, 0);
-                    return totalEmailsSent > 0 ? (totalClicks / totalEmailsSent) * 100 : 0;
-                case 'conversionRate':
-                    const clicks = emails.reduce((sum, e) => sum + e.uniqueClicks, 0);
-                    const orders = emails.reduce((sum, e) => sum + e.totalOrders, 0);
-                    return clicks > 0 ? (orders / clicks) * 100 : 0;
-                case 'unsubscribeRate':
-                    const unsubs = emails.reduce((sum, e) => sum + e.unsubscribesCount, 0);
-                    return totalEmailsSent > 0 ? (unsubs / totalEmailsSent) * 100 : 0;
-                case 'bounceRate':
-                    const bounces = emails.reduce((sum, e) => sum + e.bouncesCount, 0);
-                    return totalEmailsSent > 0 ? (bounces / totalEmailsSent) * 100 : 0;
-                case 'spamRate':
-                    const spam = emails.reduce((sum, e) => sum + e.spamComplaintsCount, 0);
-                    return totalEmailsSent > 0 ? (spam / totalEmailsSent) * 100 : 0;
-                default:
-                    return 0;
+                case 'revenue': return totals.revenue;
+                case 'emailsSent': return totals.emailsSent;
+                case 'totalOrders': return totals.orders;
+                case 'avgOrderValue': return totals.orders > 0 ? totals.revenue / totals.orders : 0;
+                case 'revenuePerEmail': return totals.emailsSent > 0 ? totals.revenue / totals.emailsSent : 0;
+                case 'openRate': return totals.emailsSent > 0 ? (totals.opens / totals.emailsSent) * 100 : 0;
+                case 'clickRate': return totals.emailsSent > 0 ? (totals.clicks / totals.emailsSent) * 100 : 0;
+                case 'clickToOpenRate': return totals.opens > 0 ? (totals.clicks / totals.opens) * 100 : 0;
+                case 'conversionRate': return totals.clicks > 0 ? (totals.orders / totals.clicks) * 100 : 0;
+                case 'unsubscribeRate': return totals.emailsSent > 0 ? (totals.unsubs / totals.emailsSent) * 100 : 0;
+                case 'bounceRate': return totals.emailsSent > 0 ? (totals.bounces / totals.emailsSent) * 100 : 0;
+                case 'spamRate': return totals.emailsSent > 0 ? (totals.spam / totals.emailsSent) * 100 : 0;
+                default: return 0;
             }
         };
 
-        const currentValue = calculateMetricValue(currentPeriodEmails, metric);
-        const previousValue = calculateMetricValue(previousPeriodEmails, metric);
+        const currentValue = calculateMetricValue(currStepEmails, metric);
+        const previousValue = calculateMetricValue(prevStepEmails, metric);
 
-        let change = 0;
-        if (previousValue !== 0) {
-            change = ((currentValue - previousValue) / previousValue) * 100;
-        } else if (currentValue > 0) {
-            change = 100;
-        }
+        // If no baseline, don't force +100% — show nothing
+        if (prevStepEmails.length === 0 || previousValue === 0) return null;
 
-        // Determine if positive (for negative metrics like unsubscribe rate, lower is better)
+        const change = ((currentValue - previousValue) / previousValue) * 100;
+
         const negativeMetrics = ['unsubscribeRate', 'spamRate', 'bounceRate'];
         const isNegativeMetric = negativeMetrics.includes(metric);
         const isPositive = isNegativeMetric ? change < 0 : change > 0;
 
-        return { change, isPositive };
+        const previousPeriod = {
+            startDate: dateWindows!.prevStartDateOnly,
+            endDate: dateWindows!.prevEndDateOnly
+        };
+
+        return { change, isPositive, previousValue, previousPeriod };
     };
 
-
+    // Strict decimals/formatting per request
     const formatMetricValue = (value: number, metric: string) => {
         const metricConfig = metricOptions.find(m => m.value === metric);
         if (!metricConfig) return value.toString();
 
-        switch (metricConfig.format) {
-            case 'currency':
-                return new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD',
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0,
-                }).format(value);
-            case 'percentage':
-                // Use more decimals for very small values
-                if (value < 0.1 && value > 0) {
-                    return `${value.toFixed(3)}%`;
-                } else if (value < 1 && value > 0) {
-                    return `${value.toFixed(2)}%`;
-                }
-                return `${value.toFixed(1)}%`;
-            default:
-                return new Intl.NumberFormat('en-US').format(Math.round(value));
+        if (metricConfig.format === 'currency') {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }).format(value);
         }
+
+        if (metricConfig.format === 'percentage') {
+            const decimals = metric === 'spamRate' ? 3 : 2;
+            return `${value.toFixed(decimals)}%`;
+        }
+
+        // number
+        if (metric === 'emailsSent' || metric === 'totalOrders') {
+            return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(value));
+        }
+        return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
     };
 
-    // Calculate Y-axis range for a step based on its sparkline data
-    const getStepYAxisRange = (sparklineData: any[], metric: string) => {
-        if (sparklineData.length === 0) {
-            return metric === 'revenue' ? { min: 0, max: 100 } : { min: 0, max: 10 };
-        }
-
-        const values = sparklineData.map(d => d.value);
-        const minValue = Math.min(...values);
-        const maxValue = Math.max(...values);
-
-        // Always start from 0 for better visual consistency
-        let min = 0;
-        let max = maxValue;
-
-        // If all values are the same or very close, add padding
-        if (maxValue - minValue < 0.01 || maxValue === 0) {
-            max = maxValue > 0 ? maxValue * 1.5 : 10;
-        } else {
-            // Add 20% padding to top
-            max = maxValue * 1.2;
-        }
-
-        // Round to nice numbers based on metric type
-        const metricConfig = metricOptions.find(m => m.value === metric);
-
-        if (metricConfig?.format === 'currency') {
-            // Round currency to nice numbers
-            if (max > 10000) {
-                max = Math.ceil(max / 1000) * 1000;
-            } else if (max > 1000) {
-                max = Math.ceil(max / 100) * 100;
-            } else if (max > 100) {
-                max = Math.ceil(max / 10) * 10;
-            } else {
-                max = Math.ceil(max);
-            }
-        } else if (metricConfig?.format === 'percentage') {
-            // Round percentages appropriately
-            if (max < 1) {
-                max = Math.ceil(max * 100) / 100;
-            } else if (max < 10) {
-                max = Math.ceil(max);
-            } else {
-                max = Math.ceil(max / 5) * 5;
-            }
-        } else {
-            // Numbers - round to nice values
-            if (max > 1000) {
-                max = Math.ceil(max / 100) * 100;
-            } else if (max > 100) {
-                max = Math.ceil(max / 10) * 10;
-            } else {
-                max = Math.ceil(max);
-            }
-        }
-
-        return { min, max };
-    };
+    const formatDate = (d: Date) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
     // Render a single chart
     const renderStepChart = (step: FlowStepMetrics, index: number) => {
@@ -477,29 +354,32 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
         const value = step[selectedMetric as keyof FlowStepMetrics] as number;
         const yAxisRange = sharedYAxisRange;
 
-        // Chart color logic
-        let chartColor = '#8b5cf6'; // Purple default
+        // Chart color and trend indicator
+        let chartColor = '#8b5cf6'; // default purple
         let dotColor = chartColor;
-        let changeArrow = null;
-        let changeText = null;
+        let changeNode: React.ReactNode = null;
 
-        if (periodChange !== null && dateRange !== 'all') {
-            const isNegativeMetric = metricConfig?.isNegative || false;
-            const isPositiveChange = periodChange.isPositive;
-            if (isNegativeMetric) {
-                chartColor = isPositiveChange ? '#10b981' : '#ef4444'; // green if lower, red if higher
-                dotColor = chartColor;
-            } else {
-                chartColor = isPositiveChange ? '#10b981' : '#ef4444'; // green if higher, red if lower
-                dotColor = chartColor;
-            }
-            // Arrow and percentage
-            changeArrow = isPositiveChange
-                ? <span style={{ color: chartColor }}>↑</span>
-                : <span style={{ color: chartColor }}>↓</span>;
-            changeText = (
-                <span style={{ color: chartColor, fontWeight: 500 }}>
-                    {changeArrow} {Math.abs(periodChange.change).toFixed(1)}%
+        if (periodChange && dateRange !== 'all') {
+            const isIncrease = periodChange.change > 0; // direction only
+            const isGood = periodChange.isPositive; // goodness already accounts for negative metrics
+            const colorClass = isGood ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
+            const trendTooltip = `Previous period (${formatDate(periodChange.previousPeriod.startDate)} – ${formatDate(periodChange.previousPeriod.endDate)}): ${formatMetricValue(periodChange.previousValue, selectedMetric)}`;
+
+            chartColor = isGood ? '#10b981' : '#ef4444';
+            dotColor = chartColor;
+
+            changeNode = (
+                <span
+                    className={`text-lg font-bold px-2 py-1 rounded ${colorClass}`}
+                    title={trendTooltip}
+                    aria-label={trendTooltip}
+                >
+                    {isIncrease ? (
+                        <ArrowUp className="inline w-4 h-4 mr-1" />
+                    ) : (
+                        <ArrowDown className="inline w-4 h-4 mr-1" />
+                    )}
+                    {Math.abs(periodChange.change).toFixed(1)}%
                 </span>
             );
         }
@@ -512,8 +392,6 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
 
         // Chart gradient
         const chartGradient = `linear-gradient(180deg, ${chartColor}40 0%, ${chartColor}10 100%)`;
-
-        // Use parent tooltip state
 
         // X axis ticks and labels
         let xTicks: { x: number; label: string }[] = [];
@@ -546,14 +424,31 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
                     <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: dotColor, display: 'inline-block' }} />
                         <span className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{step.emailName}</span>
+                        {duplicateNameCounts[step.emailName] > 1 && (
+                            <span
+                                className="inline-flex items-center"
+                                title={`Multiple emails share the name "${step.emailName}" (${duplicateNameCounts[step.emailName]}). A/B tests or inconsistent naming can make ordering less clear.`}
+                                aria-label="Duplicate step name warning"
+                            >
+                                <AlertTriangle className={isDarkMode ? 'w-4 h-4 text-amber-300' : 'w-4 h-4 text-amber-600'} />
+                            </span>
+                        )}
                     </div>
                     {/* Metric Value and Compared-to */}
                     <div className="flex flex-col items-end">
                         <div className="flex items-center gap-2">
                             <span className="text-2xl font-bold">{formatMetricValue(value, selectedMetric)}</span>
-                            {periodChange !== null && dateRange !== 'all' && (
+                            {/* View-through badge when conversion rate > 100% */}
+                            {selectedMetric === 'conversionRate' && value > 100 && (
+                                <span
+                                    className={`text-xs px-2 py-0.5 rounded-full border ${isDarkMode ? 'border-purple-700 text-purple-200 bg-purple-900/30' : 'border-purple-200 text-purple-700 bg-purple-50'}`}
+                                >
+                                    Includes view-through
+                                </span>
+                            )}
+                            {periodChange && dateRange !== 'all' && (
                                 <span className="text-lg font-bold px-2 py-1 rounded" style={{ color: chartColor, background: 'transparent' }}>
-                                    {changeText}
+                                    {changeNode}
                                 </span>
                             )}
                         </div>
@@ -662,7 +557,7 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
 
     return (
         <section>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                     <Workflow className={`w-6 h-6 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
                     <h3 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
@@ -685,7 +580,7 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
                             `}
                         >
                             <option value="">Select a flow</option>
-                            {uniqueFlowNames.map(flow => (
+                            {uniqueFlowNames.map((flow: string) => (
                                 <option key={flow} value={flow}>{flow}</option>
                             ))}
                         </select>
@@ -713,6 +608,34 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
                             ))}
                         </select>
                         <ChevronDown className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                    </div>
+                </div>
+            </div>
+
+            {/* Naming guidance banner (Stripe-like subtle card, escalates when duplicates) */}
+            <div
+                className={`mb-4 rounded-lg border px-3 py-2 text-sm flex items-start gap-2 ${hasDuplicateNames
+                    ? (isDarkMode
+                        ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                        : 'border-amber-300 bg-amber-50 text-amber-800')
+                    : (isDarkMode
+                        ? 'border-gray-700 bg-gray-800 text-gray-300'
+                        : 'border-gray-200 bg-gray-50 text-gray-700')
+                    }`}
+            >
+                <AlertTriangle className={`mt-0.5 w-4 h-4 ${hasDuplicateNames
+                    ? (isDarkMode ? 'text-amber-300' : 'text-amber-600')
+                    : (isDarkMode ? 'text-gray-400' : 'text-gray-500')
+                    }`} />
+                <div>
+                    <div className="font-medium">
+                        Naming affects step order
+                        {hasDuplicateNames && (
+                            <span className="ml-2 font-normal">Duplicate step names detected in this flow.</span>
+                        )}
+                    </div>
+                    <div className="text-xs mt-0.5">
+                        Use unique, consistent names for each step. A/B tests can create multiple messages with similar names; add clear suffixes like “- A” and “- B” to keep steps distinct.
                     </div>
                 </div>
             </div>
