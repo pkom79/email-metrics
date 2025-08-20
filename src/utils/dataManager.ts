@@ -833,24 +833,37 @@ export class DataManager {
         dataType: 'all' | 'campaigns' | 'flows' = 'all',
         options?: { flowName?: string }
     ): { currentValue: number; previousValue: number; changePercent: number; isPositive: boolean; currentPeriod?: { startDate: Date; endDate: Date }; previousPeriod?: { startDate: Date; endDate: Date } } {
-        // Get current period dates anchored at last email activity
-        const endDate = this.getLastEmailDate();
-        const startDate = new Date(endDate);
-        let periodDays = 0;
+        let endDate: Date;
+        let startDate: Date;
+        let periodDays: number;
 
-        if (dateRange === 'all') {
-            // For "all time", we can't calculate a proper change
+        // Handle custom date ranges
+        if (dateRange.includes('custom:')) {
+            const parts = dateRange.split(':');
+            startDate = new Date(parts[1]);
+            endDate = new Date(parts[2]);
+            endDate.setHours(23, 59, 59, 999); // Include full end day
+            startDate.setHours(0, 0, 0, 0);
+            periodDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        } else if (dateRange === 'all') {
             return { currentValue: 0, previousValue: 0, changePercent: 0, isPositive: true, currentPeriod: undefined, previousPeriod: undefined };
         } else {
+            // Standard preset ranges
+            endDate = this.getLastEmailDate();
+            endDate.setHours(23, 59, 59, 999);
             periodDays = parseInt(dateRange.replace('d', ''));
-            startDate.setDate(startDate.getDate() - periodDays);
+            startDate = new Date(endDate);
+            startDate.setDate(startDate.getDate() - periodDays + 1);
+            startDate.setHours(0, 0, 0, 0);
         }
 
-        // Calculate previous period dates
+        // Calculate previous period - go back exactly the same number of days
         const prevEndDate = new Date(startDate);
-        prevEndDate.setDate(prevEndDate.getDate() - 1); // Day before current period starts
+        prevEndDate.setDate(prevEndDate.getDate() - 1);
+        prevEndDate.setHours(23, 59, 59, 999);
         const prevStartDate = new Date(prevEndDate);
         prevStartDate.setDate(prevStartDate.getDate() - periodDays + 1);
+        prevStartDate.setHours(0, 0, 0, 0);
 
         // Get data based on type
         let campaignsToUse = this.campaigns;
@@ -948,8 +961,7 @@ export class DataManager {
 
         // Determine if positive (for negative metrics like unsubscribe rate, lower is better)
         const negativeMetrics = ['unsubscribeRate', 'spamRate', 'bounceRate'];
-        const isNegativeMetric = negativeMetrics.includes(metricKey);
-        const isPositive = isNegativeMetric ? changePercent < 0 : changePercent > 0;
+        const isPositive = negativeMetrics.includes(metricKey) ? changePercent <= 0 : changePercent >= 0;
 
         return {
             currentValue,
