@@ -92,6 +92,7 @@ export const parseCampaignCsvRow = (raw: RawCampaignData, id: number): Processed
 
   return {
     id,
+    campaignName: raw.campaign_name,
     subject: raw.campaign_name,
     sentDate,
     dayOfWeek: sentDate.getDay(),
