@@ -271,3 +271,12 @@ export interface ValidationError {
     field: string;
     message: string;
 }
+
+// ============================================
+// COMPARISON MODES
+// ============================================
+export type CompareMode = 'prev-period' | 'prev-year';
+export const COMPARE_MODE_LABELS: Record<CompareMode, string> = {
+    'prev-period': 'Previous period',
+    'prev-year': 'Same period last year'
+};

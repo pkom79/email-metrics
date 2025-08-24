@@ -7,6 +7,7 @@ interface FlowStepAnalysisProps {
     dateRange: string;
     // NEW: accept global granularity like Metric Cards
     granularity: 'daily' | 'weekly' | 'monthly';
+    compareMode?: 'prev-period' | 'prev-year';
 }
 
 interface FlowStepMetrics {
@@ -29,7 +30,7 @@ interface FlowStepMetrics {
     totalClicks: number;
 }
 
-const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRange, granularity }) => {
+const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRange, granularity, compareMode = 'prev-period' }) => {
     // Tooltip state for charts
     const [tooltip] = useState<{
         chartIndex: number;
@@ -71,11 +72,19 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
         const endDate = toDateOnly(dataManager.getLastEmailDate());
         const startDate = toDateOnly(new Date(endDate));
         startDate.setDate(endDate.getDate() - days);
-        const prevEndDate = toDateOnly(new Date(startDate));
-        const prevStartDate = toDateOnly(new Date(prevEndDate));
-        prevStartDate.setDate(prevEndDate.getDate() - days);
+        let prevStartDate: Date; let prevEndDate: Date;
+        if (compareMode === 'prev-year') {
+            prevStartDate = toDateOnly(new Date(startDate));
+            prevEndDate = toDateOnly(new Date(endDate));
+            prevStartDate.setFullYear(prevStartDate.getFullYear() - 1);
+            prevEndDate.setFullYear(prevEndDate.getFullYear() - 1);
+        } else {
+            prevEndDate = toDateOnly(new Date(startDate));
+            prevStartDate = toDateOnly(new Date(prevEndDate));
+            prevStartDate.setDate(prevEndDate.getDate() - days);
+        }
         return { startDateOnly: startDate, endDateOnly: endDate, prevStartDateOnly: prevStartDate, prevEndDateOnly: prevEndDate, days };
-    }, [dateRange, dataManager]);
+    }, [dateRange, dataManager, compareMode]);
 
     // Live flows only
     const liveFlowEmails = useMemo(() => {
@@ -363,7 +372,8 @@ const FlowStepAnalysis: React.FC<FlowStepAnalysisProps> = ({ isDarkMode, dateRan
             const isIncrease = periodChange.change > 0; // direction only
             const isGood = periodChange.isPositive; // goodness already accounts for negative metrics
             const colorClass = isGood ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
-            const trendTooltip = `Previous period (${formatDate(periodChange.previousPeriod.startDate)} – ${formatDate(periodChange.previousPeriod.endDate)}): ${formatMetricValue(periodChange.previousValue, selectedMetric)}`;
+            const label = compareMode === 'prev-year' ? 'Same period last year' : 'Previous period';
+            const trendTooltip = `${label} (${formatDate(periodChange.previousPeriod.startDate)} – ${formatDate(periodChange.previousPeriod.endDate)}): ${formatMetricValue(periodChange.previousValue, selectedMetric)}`;
 
             chartColor = isGood ? '#10b981' : '#ef4444';
             dotColor = chartColor;

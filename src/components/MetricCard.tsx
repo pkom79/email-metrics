@@ -18,6 +18,7 @@ interface MetricCardProps {
   // Previous period tooltip data
   previousValue?: number;
   previousPeriod?: { startDate: Date; endDate: Date };
+  compareMode?: 'prev-period' | 'prev-year';
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -31,7 +32,8 @@ const MetricCard: React.FC<MetricCardProps> = ({
   metricKey,
   sparklineData = [],
   previousValue,
-  previousPeriod
+  previousPeriod,
+  compareMode = 'prev-period'
 }) => {
   const isAllTime = dateRange === 'all';
 
@@ -64,9 +66,10 @@ const MetricCard: React.FC<MetricCardProps> = ({
     }
   };
   const formatDate = (d: Date) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const label = compareMode === 'prev-year' ? 'Same period last year' : 'Previous period';
   const trendTooltip = previousPeriod && previousValue != null
-    ? `Previous period (${formatDate(previousPeriod.startDate)} – ${formatDate(previousPeriod.endDate)}): ${formatPrevValue(previousValue)}`
-    : 'Change vs previous period';
+    ? `${label} (${formatDate(previousPeriod.startDate)} – ${formatDate(previousPeriod.endDate)}): ${formatPrevValue(previousValue)}`
+    : `Change vs ${label.toLowerCase()}`;
 
   return (
     <div className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-lg p-4 hover:shadow-lg transition-all duration-200 hover:-translate-y-1`}>
